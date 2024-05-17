@@ -64,23 +64,17 @@ public class NaiveAssembler {
 					bb.put(new byte	[] { 0x48, (byte) 0xC7});
 				else if(opSize == 32)
 					bb.put(new byte	[] { (byte) 0xC7});
-			}
+			} 
 			
 			if(dst instanceof Register r) {
 				bb.put((byte) (0xC0 + r.reg));
 			}
 				
 			if(src instanceof Immediate i) {
-				if(0 <= i.val )
-				bb.putInt(i);
+				if((long)(int)i.val == i.val)
+					bb.putInt((int)i.val);
 			}
-//			if(dst instanceof Register r && src instanceof Immediate i) {
-//				bytes = new byte[] { 72, -57, // Mov
-//						(byte) (0xC0 + r.reg), // rDest
-//						(byte) i.val, (byte) (i.val >>> 8),// value
-//						(byte) (i.val >>> 16), (byte) (i.val >>> 24)}; 
-//				
-//			}
+			bytes = Arrays.copyOf(bb.array(), bb.position());
 		}
 	}
 	class BinOp extends Instruction {
@@ -94,16 +88,36 @@ public class NaiveAssembler {
 		}
 		@Override
 		void compile() {
+			int opSize = dst.size;
 			ByteBuffer bb = ByteBuffer.allocate(256);
+			bb.order(ByteOrder.LITTLE_ENDIAN);
 			
-			bb.put(new byte	[] { 72, -57});
-			if(dst instanceof Register r && src instanceof Immediate i) {
-				bytes = new byte	[] { 72, -57, // Mov
-						(byte) (0xC0 + r.reg), // rDest
-						(byte) i.val, (byte) (i.val >>> 8),// value
-						(byte) (i.val >>> 16), (byte) (i.val >>> 24)}; 
-				
+			if(src instanceof Immediate i) {
+				if((long)(byte)i.val == i.val) {
+					if(opSize == 64)
+						bb.put(new byte	[] { 0x48, (byte) (0x83)});
+					else if(opSize == 32)
+						bb.put(new byte	[] { (byte) 0x83});
+				} else if((long)(int)i.val == i.val) {
+					if(opSize == 64)
+						bb.put(new byte	[] { 0x48, (byte) (0x81)});
+					else if(opSize == 32)
+						bb.put(new byte	[] { (byte) 0x81});
+				}
 			}
+			
+			if(dst instanceof Register r) {
+				bb.put((byte) (0xC0 + r.reg + (op<<3)));
+			}
+				
+			if(src instanceof Immediate i) {
+				if((long)(byte)i.val == i.val)
+					bb.put((byte)i.val);
+				else if((long)(int)i.val == i.val)
+					bb.putInt((int)i.val);
+			}
+			
+			bytes = Arrays.copyOf(bb.array(), bb.position());
 		}
 	}
 	class Ret extends Instruction {
@@ -125,6 +139,12 @@ public class NaiveAssembler {
 	Instruction[] mov(Register r, long val) {
 		return new Instruction[] {new Mov(r, new Immediate(val))};
 	}
+	Instruction[] add(Register r, long val) {
+		return new Instruction[] {new BinOp(0, r, new Immediate(val))};
+	}
+	Instruction[] sub(Register r, long val) {
+		return new Instruction[] {new BinOp(5, r, new Immediate(val))};
+	}
 	Instruction[] ret() {
 		return new Instruction[] {new Ret(null)};
 	}
@@ -141,6 +161,7 @@ public class NaiveAssembler {
 	NaiveAssembler(){
 		Instruction[][] instrs = {
 			mov(RAX, 5),
+			sub(RAX, 5),
 			ret()
 		};
 		
@@ -159,7 +180,7 @@ public class NaiveAssembler {
 					e.printStackTrace();
 				}
 			}
-//		byte[] mergedBytes = bos.toByteArray();
+		byte[] bytes = bos.toByteArray();
 
 //		byte[] bytes = toArr("488D1D0000000048B900E40B5402000000488B034883C30048FFC975F4C3         ");
 //		byte[] bytes = toArr("488D1D0000000048B900E40B5402000000488D15080000004839D3730D488B034883C30048FFC975EFC3E800000000            ");
@@ -176,18 +197,25 @@ public class NaiveAssembler {
 		
 		// Indexing fat
 //		byte[] bytes = toArr("483B0A7D06488B44CA08C3E800000000"); // slow
-		byte[] bytes = toArr("488B44CA08C3"); // fast
+//		byte[] bytes = toArr("488B44CA08C3"); // fast
 		
 		
 		for(byte b : bytes)
 			System.out.print("%02x ".formatted(b));
 		System.out.println();
+		for(Instruction[] is : instrs)
+			for(Instruction i : is) {
+				for(byte b : i.bytes)
+					System.out.print("%02x ".formatted(b));
+				System.out.println();
+			}
+		
 		
 		try (FileOutputStream fos = new FileOutputStream("compiled/code.bin")) {
 			fos.write(bytes);
 		} catch (IOException e) {e.printStackTrace();}
 		
-		for(int repeat = 0; repeat < 10; repeat++) {
+		for(int repeat = 0; repeat < 1; repeat++) {
 			long start = System.nanoTime();
 			try {
 //				Runtime.getRuntime().exec("C:\\Users\\kgeijsen\\Desktop\\C++ workspace\\HexRun\\x64\\Debug\\HexRun.exe");
