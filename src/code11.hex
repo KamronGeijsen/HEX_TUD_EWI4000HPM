@@ -1,0 +1,4 @@
+init list = new Array<dyn class A>()
+for some_things {
+	A a = new A()
+}

@@ -1,0 +1,83 @@
+
+fn inc int a -> int b 
+{
+	b = a + 1
+}
+
+fn inc int a -> int b {
+	b = a + 1
+}
+
+// fn inc int a -> int b
+// 	b = a + 1
+
+fn inc int a -> int b { b = a + 1 }
+
+fn inc int a -> int b:
+	b = a + 1
+	
+fn inc int a -> int b: {
+	b = a + 1
+}
+
+fn inc int a -> int b: {
+	b = a + 1
+}
+
+fn inc int a -> int b: b = a + 1
+
+fn inc int a -> int b: { b = a + 1 }
+
+// fn inc int a -> int b;
+// 	b = a + 1
+	
+// fn inc int a -> int b; {
+// 	b = a + 1
+// }
+
+// fn inc int a -> int b; {
+// 	b = a + 1
+// }
+
+// fn inc int a -> int b; b = a + 1
+
+// fn inc int a -> int b; { b = a + 1 }
+
+
+fn add int a, int b -> int c
+{
+	c = a + b
+}
+
+fn add int a, int b -> int c {
+	c = a + b
+}
+
+// fn add int a, int b -> int c
+// 	c = a + b
+
+fn add int a, int b -> int c:
+	c = a + b
+	
+fn add int a, int b -> int c: {
+	c = a + b;
+};
+
+fn add int a, int b -> int c: {
+	c = a + b
+};
+
+
+
+fn add int a, int b -> int c: c = a + b
+
+fn add int a, int b -> int c: { c = a + b }
+
+fn add int a, int b -> int c { c = a + b } 
+
+fn add { return ans[0] + ans[1] }
+fn inc int { return ans[0] }
+fn add int, int { return ans[0] + ans[1] }
+fn add int a, int b { return a + b }
+fn add int a, int b -> int { return a + b }
+

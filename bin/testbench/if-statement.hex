@@ -1,0 +1,55 @@
+int i = 0
+
+if i == 0: print i
+
+if i == 0: 
+	print i
+
+if (i == 0): print i
+
+if (i == 0): 
+	print i
+
+if i == 0: { print i }
+
+if i == 0: { 
+	print i
+}
+
+if i == 0:
+{ 
+	print i
+}
+
+if (i == 0): { print i }
+
+if (i == 0): { 
+	print i
+}
+
+if (i == 0):
+{ 
+	print i
+}
+
+if i == 0 { print i }
+
+if i == 0 { 
+	print i
+}
+
+if i == 0
+{ 
+	print i
+}
+
+if (i == 0) { print i }
+
+if (i == 0) { 
+	print i
+}
+
+if (i == 0)
+{ 
+	print i
+}

@@ -1,0 +1,58 @@
+inc: inc int a -> int b
+{
+	b = a + 1
+}
+
+inc: int a -> int b {
+	b = a + 1
+}
+
+inc: int a -> int b
+	b = a + 1
+
+inc: int a -> int b;
+	b = a + 1
+	
+inc: int a -> int b; {
+	b = a + 1
+}
+
+inc: int a -> int b; {
+	b = a + 1
+}
+
+inc: int a -> int b; b = a + 1
+
+inc: int a -> int b; { b = a + 1 }
+
+inc: int a -> int b { b = a + 1 } 
+
+
+add: int a, int b -> int c 
+{
+	c = a + b
+}
+
+add: int a, int b -> int c {
+	c = a + b
+}
+
+add: int a, int b -> int c
+	c = a + b
+
+add: int a, int b -> int c;
+	c = a + b
+	
+add: int a, int b -> int c; {
+	c = a + b
+}
+
+add: int a, int b -> int c; {
+	c = a + b
+}
+
+add: int a, int b -> int c; c = a + b
+
+add: int a, int b -> int c; { c = a + b }
+
+add: int a, int b -> int c { c = a + b } 

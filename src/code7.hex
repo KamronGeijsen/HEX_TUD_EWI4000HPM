@@ -1,0 +1,62 @@
+int a = 0
+
+fn inc int a -> int b {
+	b = a + 1
+}
+
+int b = inc a
+
+print b
+
+class Foo {
+	int a
+	int b
+}
+
+Foo = (1, 2)
+Foo foo = (1, 2)
+(Foo, int) foo = (1, 2, 3)
+(Foo foo, int a) = (1, 2, 3)
+(Foo foo, int i) s = (1, 2, 3)
+
+struct Bla {
+    int x
+}
+
+int x = 1
+(int x) b = (int x)(1)
+=Bla b = Bla(1)
+=int x; Bla b = x(1)
+=Bla b = (x as int)(1)
+
+(int x) b = (int x)(1)
+=Bla b = Bla(1)
+
+
+
+i = (int d, int e, int f)((int a, int b, int c)(1, 2, 3))
+i.d
+
+class Foo {
+	int a
+	int b
+}
+
+Foo = (1, 2)
+Foo foo = (1, 2)
+(Foo, int) foo = (1, 2, 3)
+(Foo foo, int a) = (1, 2, 3)
+(Foo foo, int i) s = (1, 2, 3)
+
+int i = 0
+(int, int) i = (1, 2)
+(int a, int b) = (1, 2)
+(int a, int b) a = (1, 2)
+((int a, int b) a) b = (1, 2)
+
+print(int)
+(int, int) i = new(int a, int b)(1, 2)
+(int, int) i = new(int a, int b)(1, 2)
+
+(int a) i = new int(1, 2)
+(int a) i = new (int a)(1, 2)

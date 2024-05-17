@@ -1,0 +1,42 @@
+int i = 0
+ i  = i+ 2
+if i< 4 {
+	print i
+}
+print(i)
+
+(int a, int b) c = (1,2)
+int a, b = (1,2)
+
+add: int a, int b -> int c {
+	c = a + b
+}
+
+init: -> {
+	doStuff();doOtherStuff()
+}
+
+main: -> int z {
+	doOtherStuff()
+	z = 0x1fl
+}
+
+i = i +
+([2])
+
+drawPoint: int x, int y -> {
+	if x == y {
+		print x
+	}
+	else{ 
+		print y
+	}
+}
+
+int i = 1 ++//comment
+int i = 0
+
+int i = 0 //other comment
+
+int(i,l) = 
+0

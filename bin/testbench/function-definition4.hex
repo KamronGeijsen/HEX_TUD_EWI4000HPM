@@ -1,0 +1,59 @@
+
+fn inc int a -> int b 
+{
+	b = a + 1
+}
+
+fn inc int a -> int b {
+	b = a + 1
+}
+
+fn inc int a -> int b
+	b = a + 1
+
+fn inc int a -> int b;
+	b = a + 1
+	
+fn inc int a -> int b; {
+	b = a + 1
+}
+
+fn inc int a -> int b; {
+	b = a + 1
+}
+
+fn inc int a -> int b; b = a + 1
+
+fn inc int a -> int b; { b = a + 1 }
+
+fn inc int a -> int b { b = a + 1 } 
+
+
+fn add int a, int b -> int c 
+{
+	c = a + b
+}
+
+fn add int a, int b -> int c {
+	c = a + b
+}
+
+fn add int a, int b -> int c
+	c = a + b
+
+fn add int a, int b -> int c;
+	c = a + b
+	
+fn add int a, int b -> int c; {
+	c = a + b
+}
+
+fn add int a, int b -> int c; {
+	c = a + b
+}
+
+fn add int a, int b -> int c; c = a + b
+
+fn add int a, int b -> int c; { c = a + b }
+
+fn add int a, int b -> int c { c = a + b } 

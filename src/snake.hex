@@ -1,0 +1,63 @@
+fn random-> int r {}
+fn setColorAt int x, int y, bit on -> {}
+fn setLifeAt int x, int y, byte life -> {}
+fn getLifeAt int x, int y -> byte life {}
+fn getKeys -> nibble keyset {}
+
+ns snake {
+	int x = 0
+	int y = 0
+	couple dir = 0
+	int len = 0
+}
+ns keys {
+	nibble keyset = 0
+	nibble lastkeys = 0
+}
+
+fn init -> {
+	snake.x = 5
+	snake.y = 5
+	snake.dir = 0
+}
+
+fn loop -> {
+	// Keys
+	keys.keyset = getKeys
+	keys.lastkeys = keys.lastkeys &~ keys.keyset
+	
+	// Direction
+	bit b = snake.dir
+	if snake.dir & 0b10 {
+		snake.x = snake.x + 2*b - 1
+	} else {
+		snake.y = snake.y + 2*b - 1
+	}
+	
+	// Cookie
+	if snake.x == cookie.x && snake.y == cookie.y {
+		snake.len = snake.len + 3
+		while getLifeAt(cookie.x, cookie.y) {
+			cookie.x = random
+			cookie.y = random
+		}
+	}
+	
+	// Graphics
+	setLifeAt(x, y, len)
+	
+	for 0 < 16 each x {
+		for 0 < 16 each y {
+			int l = getLifeAt(x, y)
+			if l {
+				l = l - 1;
+				setLifeAt(x, y, l)
+				setColorAt(x, y, true)
+			} else {
+				setColorAt(x, y, false)
+			}
+		}
+	}
+	
+	setColorAt(cookie.x, cookie.y, true)
+}

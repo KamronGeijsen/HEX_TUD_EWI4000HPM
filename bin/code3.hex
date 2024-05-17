@@ -1,0 +1,62 @@
+int i = 0
+ i  = i+ 2
+ 
+i =
+
+
+i+2
+i= i
++2
+i=i+(-
+2)
+
+i = i
++ 1
+
+i=i
++
+i
+
+i = i - - - i
+
+i = rand
+i = rand()
+i = inc(a)(b)(c)i
+i = inc(i)
+i = - inc i
+i = inc -i
+i = inc (-i)
+
+if(i< 4){
+	print(i)
+}
+
+print
+(i)
+
+(int a, int b) c = (1,2)
+
+def add int x, int y -> int z {
+	return x + y
+}
+
+(int x, int y -> int z) add {
+	return x + y
+}
+
+int add int x, int y {
+	return x + y
+}
+
+def init {
+	doStuff()
+}
+
+def main -> int z {
+	doOtherStuff()
+	return 0
+}
+
+def drawPoint int x, int y -> {
+
+}

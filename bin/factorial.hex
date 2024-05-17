@@ -1,0 +1,11 @@
+
+
+long n = 5
+print n
+fn factorial(long n)->long {
+    if n == 0:
+        return 1
+    n * factorial(n-1)
+}
+
+print (factorial 6)

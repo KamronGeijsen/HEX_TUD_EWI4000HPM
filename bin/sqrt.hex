@@ -1,0 +1,19 @@
+long n = 324
+print n
+
+int lower = 0
+int higher = n
+while lower + 1 < higher {
+	int mid = (lower + higher)/2
+	// print mid
+	int midsquared = mid * mid
+	if midsquared < n:
+		lower = mid
+	elif midsquared > n:
+		higher = mid
+	elif midsquared == n {
+		lower = mid
+		higher = mid
+	}
+}
+print lower

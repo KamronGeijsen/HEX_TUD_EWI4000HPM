@@ -1,0 +1,8 @@
+long i = 1
+long l = 1
+while i < 100000000 {
+	print i
+	long temp = i
+	i = l
+	l = temp + l  
+}

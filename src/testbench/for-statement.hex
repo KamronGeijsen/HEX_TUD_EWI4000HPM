@@ -1,0 +1,62 @@
+
+	
+for list {
+	ans + 1
+}
+
+for list 
+{
+	ans + 1
+}
+
+for list { ans + 1 }
+
+
+for list: {
+	ans + 1
+}
+
+for list: 
+{
+	ans + 1
+}
+
+for list: { ans + 1 }
+
+
+for list:
+	ans + 1
+
+for list: ans + 1
+
+
+
+	
+for list each a {
+	a + 1
+}
+
+for list each a
+{
+	a + 1
+}
+
+for list each a { a + 1 }
+
+
+for list each a: {
+	a + 1
+}
+
+for list each a: 
+{
+	a + 1
+}
+
+for list each a: { a + 1 }
+
+
+for list each a:
+	a + 1
+
+for list each a: a + 1

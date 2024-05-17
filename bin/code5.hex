@@ -1,0 +1,136 @@
+
+int i = 0
+do {
+	print i
+	do {
+		i = i
+	}
+}
+
+add: int a, int b -> int c {
+	c = a + b
+}
+
+print( {i++} )
+
+Point.do.bla = (10 + 5) * (12 - 13)
+
+int a = 
+if (i == 0)
+i 
+else 
+{i + 2}
+
+int a = 1 + {i++}
+
+int a = {if (i == 0) then i else {i + 2} }
+
+int a = add (1,2)
+
+int a = 0
+do {
+	print i
+}
+
+int volume = {
+	int height = 5
+	int width = 2
+	int depth = 10
+	height * width * depth
+} + 5
+
+auto add = int a, int b -> int c {
+	c = a + b
+}
+
+
+//int sum_a = for(int i = 0, s = 0; i < 10; i++) s += list[i]
+
+Point: int x, int y
+
+Point: { int x; int y }
+
+Point: (int x = 10), (int y = 12)
+
+Point: { int x = 10; int y = 12 }
+
+// error, 3rd element in tuple is not mutable, so not a valid field/attribute
+Point: int x, int y, 5
+
+// error, 3rd element in tuple is not mutable, so not a valid field/attribute
+Point: int x, int y, (int a -> {})
+
+applyFun: (int -> int) f, int b -> int {
+	return f(b)
+}
+
+addBy: int a -> (int -> int) {
+	return (int b -> int) { return a + b }
+}
+
+// Is equal to the above
+addBy: int a -> (int -> int) {
+	return ( (int a = a) |> int b -> int) { return a + b }
+}
+
+(Scanner sc = new Scanner(System.in)) |> {
+	// code if creation doesn't fail
+}
+
+(int a = 10) |> {
+	print a
+}
+// here a is not defined
+
+addByI: int a |> int b -> int { return a + b }
+auto addBy5 = addByI
+addBy5.a = 5
+print addBy5(3)
+
+auto window = (int width = 1000), (int height = 600) 
+RightPane: int x, int y |> (int w = window.width-x), int h
+RightPane rightPane = new RightPane(   
+
+
+
+
+
+
+addBy: int a -> (int -> int) {
+	return (int b -> int) { return a + b }
+}
+(int -> int) addBy5 = addBy(5);
+Integer bweh = new Integer(5)
+Blehem bweehh = new Blehem(5)
+System.out.println(bweh.equals(bweehh))
+
+class Blehem {
+	int i = 0;
+    private Blehem(int i) {
+    	this.i = i;
+    }
+}
+
+print addBy5(bweh)
+
+// function defenition
+// class defenition
+// lambda definition
+// lambda datatype
+// lambda/function type definition
+
+(int -> int) addBy5 = &(int a -> int b) {b = a + 5}
+adderByAmounter: (int -> int)
+
+(int -> int) addByAmounter: {
+	
+}
+(int -> int): {}
+type AddByAmounter: (int -> int) 
+AddByAmounter: {}
+type Integer: int 
+type (int, int) Point
+AddByAmounter adder = AddByAmounter:{ ans + 1 }
+adder = AddByAmounter:{ ans + 5 }
+class Point:(int, int)
+Point.0

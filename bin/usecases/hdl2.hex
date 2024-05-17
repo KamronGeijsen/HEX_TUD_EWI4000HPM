@@ -1,0 +1,66 @@
+struc Pattern {
+	bit in // in
+	bit out // out
+}
+
+fn NAND2 bit a, bit b -> bit c {
+	sleep(1)
+	c = a ~& b
+}
+fn NOT bit a, bit b -> bit c {
+	sleep(1)
+	c = a ~& b
+}
+
+struc DFlipFlop {
+	bit d // in
+	bit clk // in
+	
+	bit q //out
+	bit qn //out
+	
+	ns {
+		NAND2 n1
+		NAND2 n2
+	}
+}
+
+fn DFlipFlop bit d, bit clk -> bit q, bit qn {
+	NAND2 nand_q1
+	NAND2 nand_q2
+	
+	NAND2 nand_nd
+	NAND2 nand_d
+	
+	NOT not_d
+	
+	bit wire_q
+	bit wire_qn
+	
+	bit wire_t1
+	bit wire_t2	
+	
+	(c=>wire_q) = n1(wire_qn=>a, wire_t1=>b)
+	wire_qn = n2(wire_q, wire_t2)
+	
+	q = wire_q
+	qn = wire_qn
+	
+	wire_t1 = nd(d, clk)
+	wire_t2 = nd(not_d(d), clk)
+}
+
+component:
+ type
+  pinouts
+  wire/int/bundle etc
+  in/out/inout
+ architecture
+  structural
+   components
+   wires
+   connections
+  behavioral
+   function
+
+ 

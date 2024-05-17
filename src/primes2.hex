@@ -1,0 +1,19 @@
+long n = 3
+print 2
+while n < 100 {
+	int i = 2
+	bool isPrime = true
+	int s = n
+	//print s
+	while i < s {
+		//print i
+		if n % i == 0 {
+			isPrime = false
+			//print i
+		}
+		i = i + 1
+	}
+	if isPrime:
+		print n
+	n = n + 2
+}

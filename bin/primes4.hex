@@ -1,0 +1,35 @@
+
+long n = 3
+print "Primes: "
+print 2
+while n <= 1000000 {
+	(int i, int isPrime, int s) = (3, 1, sqrt n)
+	while i <= s {
+		if n % i == 0:
+			isPrime = 0
+		i = i + 2
+	}
+	if isPrime:
+		print n
+	n = n + 2
+}
+
+fn sqrt long n -> long sqrtn {
+	
+	long lower = 0
+	long higher = n
+	
+	while lower + 1 < higher {
+		long mid = (lower + higher)/2
+		mid * mid
+		if ans < n:
+			lower = mid
+		elif ans > n:
+			higher = mid
+		elif ans == n {
+			lower = mid
+			higher = mid
+		}
+	}
+	sqrtn = lower
+} 

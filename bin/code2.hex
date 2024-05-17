@@ -1,0 +1,23 @@
+int i = 0
+ i  = i+ 2
+if(i< 4){
+	print(i)
+}
+ i  = i+ 2
+ 
+return ({
+	int x=2
+	return x
+})
+
+int silly(int x, int y){
+	return x+y
+}
+
+int i[3] = (1,2,3)
+
+// primitive size
+i.size == 32
+
+// array length
+i.length = 3

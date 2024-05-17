@@ -1,0 +1,43 @@
+
+long n = 3
+print "Primes: "
+print 2
+while n <= 1000000 {
+	int i = 2
+	int isPrime = 1
+	//print n
+	int s = sqrt n
+	while i <= s {
+		//print i
+		if n % i == 0 {
+			isPrime = 0
+			//print i
+		}
+		i = i + 1
+	}
+	if isPrime:
+		print n
+	n = n + 2
+	//n = n + 1
+}
+
+fn sqrt long n -> long sqrtn {
+	
+	long lower = 0
+	long higher = n
+	
+	while lower + 1 < higher {
+		long mid = (lower + higher)/2
+		// print mid
+		long midsquared = mid * mid
+		if midsquared < n:
+			lower = mid
+		elif midsquared > n:
+			higher = mid
+		elif midsquared == n {
+			lower = mid
+			higher = mid
+		}
+	}
+	sqrtn = lower
+}

@@ -1,0 +1,45 @@
+
+long n = 3
+print 2
+print "hoi"
+while n <= 10 {
+	int i = 2
+	int isPrime = 1
+	//print n
+	int s = sqrt n
+	//print s
+	while i <= s {
+		//print i
+		if n % i == 0 {
+			isPrime = 0
+			//print i
+		}
+		i = i + 1
+	}
+	if isPrime:
+		print n
+	n = n + 2
+	//n = n + 1
+}
+
+fn sqrt int n -> int sqrtn {
+	
+	int lower = 0
+	int higher = n
+	
+	while lower + 1 < higher {
+		int mid = (lower + higher)/2
+		// print mid
+		int midsquared = mid * mid
+		if midsquared < n:
+			lower = mid
+		elif midsquared > n:
+			higher = mid
+		elif midsquared == n {
+			lower = mid
+			higher = mid
+		}
+	}
+	sqrtn = lower
+	sqrtn
+}

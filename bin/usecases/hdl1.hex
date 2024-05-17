@@ -1,0 +1,50 @@
+
+fn NAND2 bit a, bit b -> bit c {
+	sleep(1)
+	c = a ~& b
+}
+fn NOT bit a -> bit b {
+	sleep(1)
+	b = ~a
+}
+
+fn DFlipFlop bit d, bit clk -> bit q, bit qn {
+	Fn<bit a, bit b -> bit c> nand_q1 = NAND2
+	Fn<bit a, bit b -> bit c> nand_q2 = NAND2
+	
+	Fn<bit a, bit b -> bit c> nand_d = NAND2
+	Fn<bit a, bit b -> bit c> nand_nd = NAND2
+	
+	Fn<bit a -> bit b> not_d = NOT
+	
+	Wire wire_q
+	Wire wire_qn
+	
+	Wire wire_t1
+	Wire wire_t2
+	
+	
+	(c=>wire_q) = nand_q1(wire_qn=>a, wire_t1=>b)
+	wire_qn = nand_q2(wire_q, wire_t2)
+	
+	q = wire_q
+	qn = wire_qn
+	
+	wire_t1 = nand_d(d, clk)
+	wire_t2 = nand_nd(not_d(d), clk)
+}
+
+component:
+ type
+  pinouts
+  wire/int/bundle etc
+  in/out/inout
+ architecture
+  structural
+   components
+   wires
+   connections
+  behavioral
+   function
+
+ 

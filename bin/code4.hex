@@ -1,0 +1,24 @@
+int i
+i = 0
+i = i 
++ 2
+byte l = 10
+l = i + l
+(print) (5 + (1))
+print l
+if i + 2 < l {
+	short j = l + 2 * l
+	l = j + i
+}
+print l
+{
+	long j = l + (1 + 1)
+	l = j + i
+}
+
+print l
+
+if i*5==0;print 10
+	
+if i * 5 != 0
+	print 1 + 2 * 3 - 4 / 2 
