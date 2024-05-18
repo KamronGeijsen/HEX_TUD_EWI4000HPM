@@ -1,5 +1,6 @@
 package compiler;
 
+import java.awt.*;
 import java.io.BufferedReader;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
@@ -26,17 +27,27 @@ public class NaiveAssembler {
 		int reg;
 		Register(int reg, int size){
 			this.reg = reg;
-			this.size = size;
+			this.size = (Integer) size;
 		}
 	}
 	class Address extends Arg {
 		
+	}
+	class Variable extends Arg {
+		String id;
+		Variable(String id, int size){
+			this.id = id;
+			this.size = size;
+		}
 	}
 	class Immediate extends Arg {
 		long val;
 		public Immediate(long val) {
 			this.val = val;
 		}
+	}
+	class Label extends Arg {
+
 	}
 	
 	abstract class Instruction {
@@ -120,6 +131,31 @@ public class NaiveAssembler {
 			bytes = Arrays.copyOf(bb.array(), bb.position());
 		}
 	}
+//	class Push extends Instruction {
+//		Arg src;
+//		public Push(Arg src) {
+//			this.src = src;
+//		}
+//		@Override
+//		void compile() {
+//			if(src instanceof Register r) {
+//				bytes = new byte[] {(byte) (0x50 + r.reg)};
+//			}
+//		}
+//
+//	}
+	class Call extends Instruction {
+		Arg src;
+		public Call(Function fn, Arg ... args) {
+			this.src = src;
+		}
+		@Override
+		void compile() {
+			if(src instanceof Register r) {
+				bytes = new byte[] {(byte) (0x50 + r.reg)};
+			}
+		}
+	}
 	class Ret extends Instruction {
 		Arg src;
 		public Ret(Arg src) {
@@ -133,12 +169,37 @@ public class NaiveAssembler {
 		}
 		
 	}
-	
+
 	Register RAX = new Register(0, 64);
-	Register EAX = new Register(0, 32);
+	Register RCX = new Register(1, 64);
+	Register RDX = new Register(2, 64);
+	Register RBX = new Register(3, 64);
+	Register RSP = new Register(4, 64);
+	Register RBP = new Register(5, 64);
+	Register RSI = new Register(6, 64);
+	Register RDI = new Register(7, 64);
+	Register R8 = new Register(8, 64);
+	Register R9 = new Register(9, 64);
+	Register R10 = new Register(10, 64);
+	Register R11 = new Register(11, 64);
+	Register R12 = new Register(12, 64);
+	Register R13 = new Register(13, 64);
+	Register R14 = new Register(14, 64);
+	Register R15 = new Register(15, 64);
+
+
+	Instruction[] alloc(Variable v) {
+		return new Instruction[] { new BinOp(5, RSP, new Immediate(v.size/8)) };
+	}
+	Instruction[] dealloc(Variable v) {
+		return new Instruction[] { new BinOp(0, RSP, new Immediate(v.size/8)) };
+	}
 	Instruction[] mov(Register r, long val) {
 		return new Instruction[] {new Mov(r, new Immediate(val))};
 	}
+//	Instruction[] mov(Variable var, long val) {
+//		return new Instruction[] {new Mov(r, new Immediate(val))};
+//	}
 	Instruction[] add(Register r, long val) {
 		return new Instruction[] {new BinOp(0, r, new Immediate(val))};
 	}
@@ -160,15 +221,17 @@ public class NaiveAssembler {
 	}
 	NaiveAssembler(){
 		Instruction[][] instrs = {
-			mov(RAX, 5),
-			sub(RAX, 5),
-			ret()
+				mov(RAX, 5),
+				alloc(new Variable("i", 64)),
+
+				add(RAX, 5),
+				sub(RAX, 5),
+				ret()
 		};
 		
 		for(Instruction[] is : instrs)
 			for(Instruction i : is) {
 				i.compile();
-				System.out.println(i.bytes);
 			}
 		
 		ByteArrayOutputStream bos = new ByteArrayOutputStream();
@@ -201,46 +264,42 @@ public class NaiveAssembler {
 		
 		
 		for(byte b : bytes)
-			System.out.print("%02x ".formatted(b));
+			System.out.print(Integer.toHexString((b&255)|0x100).substring(1) + " ");
+		System.out.println();
 		System.out.println();
 		for(Instruction[] is : instrs)
 			for(Instruction i : is) {
 				for(byte b : i.bytes)
-					System.out.print("%02x ".formatted(b));
+					System.out.print(Integer.toHexString((b&255)|0x100).substring(1) + " ");
 				System.out.println();
 			}
-		
-		
-		try (FileOutputStream fos = new FileOutputStream("compiled/code.bin")) {
-			fos.write(bytes);
-		} catch (IOException e) {e.printStackTrace();}
-		
+
 		for(int repeat = 0; repeat < 1; repeat++) {
 			long start = System.nanoTime();
 			try {
 //				Runtime.getRuntime().exec("C:\\Users\\kgeijsen\\Desktop\\C++ workspace\\HexRun\\x64\\Debug\\HexRun.exe");
 //				Process process = new ProcessBuilder("C:\\Users\\kgeijsen\\Desktop\\C++ workspace\\HexRun\\x64\\Debug\\HexRun.exe").start();
-				ProcessBuilder process = new ProcessBuilder("C:\\Users\\kgeijsen\\Desktop\\C++ workspace\\HexRun\\x64\\Release\\HexRun.exe");
+				ProcessBuilder process = new ProcessBuilder("compiled\\hexrun.exe", "compiled\\code.hexe");
 				process.inheritIO();
 				Process p = process.start();
 				try (Scanner scanner = new Scanner(System.in);
 						OutputStream processOutputStream = p.getOutputStream();
 						BufferedReader processInputStream = new BufferedReader(new InputStreamReader(p.getInputStream()))) {
-					
+
 //					while (p.isAlive() && System.in.available() > 0 && scanner.hasNextLine()) {
 //						scanner.n
 //						String input = scanner.nextLine() + "\n";
 //						processOutputStream.write(input.getBytes());
 //						processOutputStream.flush();
-//						
+//
 //					}
-					
+
 					while(p.isAlive()) {
 						while (processInputStream.ready()) {
 							System.out.println(processInputStream.readLine());
 						}
 					}
-					
+
 				}
 			} catch (IOException e) {
 				// TODO Auto-generated catch block
