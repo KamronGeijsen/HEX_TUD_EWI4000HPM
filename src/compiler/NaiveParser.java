@@ -459,10 +459,15 @@ public class NaiveParser {
 						def.parent = e;
 					}
 					break;
+				case "new":
+					if(i < len-1)
+						l.add(i, new CoreFunctionCall(l.remove(i), l.remove(i)));
+					else
+						throw new RuntimeException("Invalid keyword usage");
+					break;
 				default:
 					break;
 				}
-				
 			}
 		}
 	}
@@ -489,31 +494,29 @@ public class NaiveParser {
 	}
 	void substituteApplyOP(ExpressionParse e) {
 		ArrayList<Block> l = ((ExpressionParse) e).expressions;
-		
-		for(int i = 0; i < l.size(); i++) {
+
+		for (int i = 0; i < l.size(); i++) {
 //			System.out.println(i + "\t$app_" + l.get(i) + "\t" + l);
-			if((l.get(i) instanceof Keyword && !(Lexer.keywordFuncOps.contains(((Keyword)l.get(i)).s) || Lexer.keywordsType.contains(((Keyword)l.get(i)).s))) || l.get(i) instanceof OperationParse) {
+			if ((l.get(i) instanceof Keyword && !(Lexer.keywordFuncOps.contains(((Keyword) l.get(i)).s)
+					|| Lexer.keywordsType.contains(((Keyword) l.get(i)).s))) || l.get(i) instanceof OperationParse)
 				continue;
-			}
-			if(i+1 >= l.size() || 
-					l.get(i+1) instanceof OperationParse ||
-					((
-						l.get(i+1) instanceof Keyword && 
-						(Lexer.keywordUnOps.contains(((Keyword)l.get(i+1)).s) ||
-						Lexer.keywordBinOps.contains(((Keyword)l.get(i+1)).s)))))
+
+			if (i + 1 >= l.size() || l.get(i + 1) instanceof OperationParse
+					|| (l.get(i + 1) instanceof Keyword && (Lexer.keywordUnOps.contains(((Keyword) l.get(i + 1)).s)
+							|| Lexer.keywordBinOps.contains(((Keyword) l.get(i + 1)).s))))
 				continue;
-			
+
 //			System.out.println(i + "\t$app_" + l.get(i) + "\t" + l);
-			
-			ArrayList<Block> operands = new ArrayList<Lexer.Block>(2);
-			operands.add(l.remove(i)); 
-			operands.add(l.remove(i));
-			l.add(i, new CoreFunctionCall(operands.get(0), operands.get(1)));
-			
+
+//			ArrayList<Block> operands = new ArrayList<Lexer.Block>(2);
+//			operands.add(l.remove(i));
+//			operands.add(l.remove(i));
+			l.add(i, new CoreFunctionCall(l.remove(i), l.remove(i)));
+
 			i--;
 		}
-		
 	}
+
 	
 	void substituteBinOP(ExpressionParse e, String[] operations) {
 		ArrayList<Block> l = e.expressions;

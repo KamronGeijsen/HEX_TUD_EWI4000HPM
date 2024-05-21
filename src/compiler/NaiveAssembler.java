@@ -12,6 +12,7 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.file.Files;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.Scanner;
 
 import compiler.Lexer.CurlyBracketParse;
@@ -31,7 +32,17 @@ public class NaiveAssembler {
 		}
 	}
 	class Address extends Arg {
-		
+		Register base;
+		Register index;
+		int scale;
+		int offset;
+		public Address(Register base, Register index, int scale, int offset, int size) {
+			this.base = base;
+			this.index = index;
+			this.scale = scale;
+			this.offset = offset;
+			this.size = size;
+		}
 	}
 	class Variable extends Arg {
 		String id;
@@ -39,6 +50,14 @@ public class NaiveAssembler {
 			this.id = id;
 			this.size = size;
 		}
+	}
+	class StackVariable extends Variable {
+		final int stackOffset;
+		StackVariable(String id, int size, int stackOffset) {
+			super(id, size);
+			this.stackOffset = stackOffset;
+		}
+		
 	}
 	class Immediate extends Arg {
 		long val;
@@ -75,15 +94,19 @@ public class NaiveAssembler {
 					bb.put(new byte	[] { 0x48, (byte) 0xC7});
 				else if(opSize == 32)
 					bb.put(new byte	[] { (byte) 0xC7});
-			} 
-			
-			if(dst instanceof Register r) {
-				bb.put((byte) (0xC0 + r.reg));
-			}
 				
-			if(src instanceof Immediate i) {
+				mr(bb, 0, dst);
+
 				if((long)(int)i.val == i.val)
 					bb.putInt((int)i.val);
+			} else if(dst instanceof Address a) {
+				bb.put(new byte	[] {0x48, (byte)0x89});
+				if(src instanceof Register d) {
+					mr(bb, d.reg, a);
+				}
+			} else if(dst instanceof Register s) {
+				bb.put(new byte	[] {0x48, (byte)0x8B});
+				mr(bb, s.reg, src);
 			}
 			bytes = Arrays.copyOf(bb.array(), bb.position());
 		}
@@ -115,38 +138,68 @@ public class NaiveAssembler {
 					else if(opSize == 32)
 						bb.put(new byte	[] { (byte) 0x81});
 				}
-			}
-			
-			if(dst instanceof Register r) {
-				bb.put((byte) (0xC0 + r.reg + (op<<3)));
-			}
+
 				
-			if(src instanceof Immediate i) {
+				mr(bb, op, dst);
 				if((long)(byte)i.val == i.val)
 					bb.put((byte)i.val);
 				else if((long)(int)i.val == i.val)
 					bb.putInt((int)i.val);
+			}else if(dst instanceof Address a) {
+
+				
+				if(opSize == 64)
+					bb.put(new byte	[] { 0x48, (byte) (0x01 + (op << 3))});
+				else if(opSize == 32)
+					bb.put(new byte	[] {(byte) (0x01 + (op << 3))});
+//				System.out.println(op + "\t" + dst + "\t" + src);
+//				System.out.println(Arrays.toString(Arrays.copyOf(bb.array(), bb.position())));
+				if(src instanceof Register r) {
+					mr(bb, r.reg, dst);
+				} else throw new RuntimeException("invalid opcode");
+				
+				
+			} else if(dst instanceof Register r) {
+				if(opSize == 64)
+					bb.put(new byte	[] { 0x48, (byte) (0x03 + (op << 3))});
+				else if(opSize == 32)
+					bb.put(new byte	[] {(byte) (0x03 + (op << 3))});
+				mr(bb, r.reg, src);
+				
 			}
 			
 			bytes = Arrays.copyOf(bb.array(), bb.position());
 		}
 	}
-//	class Push extends Instruction {
-//		Arg src;
-//		public Push(Arg src) {
-//			this.src = src;
-//		}
-//		@Override
-//		void compile() {
-//			if(src instanceof Register r) {
-//				bytes = new byte[] {(byte) (0x50 + r.reg)};
-//			}
-//		}
-//
-//	}
+	class Push extends Instruction {
+		Arg src;
+		public Push(Arg src) {
+			this.src = src;
+		}
+		@Override
+		void compile() {
+			if(src instanceof Register r) {
+				bytes = new byte[] {(byte) (0x50 + r.reg)};
+			}
+		}
+
+	}
+	class Pop extends Instruction {
+		Arg dst;
+		public Pop(Arg dst) {
+			this.dst = dst;
+		}
+		@Override
+		void compile() {
+			if(dst instanceof Register r) {
+				bytes = new byte[] {(byte) (0x58 + r.reg)};
+			}
+		}
+
+	}
 	class Call extends Instruction {
 		Arg src;
-		public Call(Function fn, Arg ... args) {
+		public Call(Arg fn, Arg ... args) {
 			this.src = src;
 		}
 		@Override
@@ -157,19 +210,31 @@ public class NaiveAssembler {
 		}
 	}
 	class Ret extends Instruction {
-		Arg src;
-		public Ret(Arg src) {
-			this.src = src;
+		public Ret() {
 		}
 		@Override
 		void compile() {
-			if(src == null) {
-				bytes = new byte[] {(byte) 0xC3};
+			bytes = new byte[] {(byte) 0xC3};
+		}
+		
+	}
+	void mr(ByteBuffer bb, int r, Arg mr) {
+		if(mr instanceof Register s) {
+			bb.put((byte) (0xC0 + (r << 3) + s.reg));
+		} else if(mr instanceof Address a) {
+			if(a.offset == 0 && a.base.reg != 5) {
+				bb.put((byte) (0x00 + (r << 3) + a.base.reg));
+			} else if(a.offset == (int)(byte)a.offset) {
+				bb.put((byte) (0x40 + (r << 3) + a.base.reg));
+				bb.put((byte) a.offset);
+			}  else {
+				bb.put((byte) (0x80 + (r << 3) + a.base.reg));
+				bb.putInt(a.offset);
 			}
 		}
 		
 	}
-
+	
 	Register RAX = new Register(0, 64);
 	Register RCX = new Register(1, 64);
 	Register RDX = new Register(2, 64);
@@ -187,28 +252,85 @@ public class NaiveAssembler {
 	Register R14 = new Register(14, 64);
 	Register R15 = new Register(15, 64);
 
-
-	Instruction[] alloc(Variable v) {
+	
+	
+	Instruction[] prolog() {
+		return new Instruction[] {
+			new Push(RBP),
+			new Mov(RBP, RSP),
+		};
+	}
+	Instruction[] epilog() {
+		return new Instruction[] { 
+			new Mov(RSP, RBP),
+			new Pop(RBP)
+		};
+	}
+	Instruction[] alloc(StackVariable v) {
 		return new Instruction[] { new BinOp(5, RSP, new Immediate(v.size/8)) };
 	}
-	Instruction[] dealloc(Variable v) {
+	Instruction[] dealloc(StackVariable v) {
 		return new Instruction[] { new BinOp(0, RSP, new Immediate(v.size/8)) };
 	}
+	
 	Instruction[] mov(Register r, long val) {
 		return new Instruction[] {new Mov(r, new Immediate(val))};
 	}
-//	Instruction[] mov(Variable var, long val) {
-//		return new Instruction[] {new Mov(r, new Immediate(val))};
-//	}
-	Instruction[] add(Register r, long val) {
-		return new Instruction[] {new BinOp(0, r, new Immediate(val))};
+	Instruction[] mov(StackVariable v, long val) {
+		return new Instruction[] {new Mov(new Address(RBP, null, 0, -v.stackOffset-8, 64), new Immediate(val))};
 	}
-	Instruction[] sub(Register r, long val) {
-		return new Instruction[] {new BinOp(5, r, new Immediate(val))};
+	Instruction[] mov(StackVariable v, Register r) {
+		return new Instruction[] {new Mov(new Address(RBP, null, 0, -v.stackOffset-8, 64), r)};
+	}
+	Instruction[] mov(Register r, StackVariable v) {
+		return new Instruction[] {new Mov(r, new Address(RBP, null, 0, -v.stackOffset-8, 64))};
+	}
+	Instruction[] mov(Register d, Register s) {
+		return new Instruction[] {new Mov(d, s)};
+	}
+	
+	Instruction[] binOp(int op, Arg a, long val) {
+		return new Instruction[] {new BinOp(op, a, new Immediate(val))};
+	}
+	Instruction[] binOp(int op, Arg a, Arg b) {
+		if(a instanceof StackVariable v)
+			a = new Address(RBP, null, 0, -v.stackOffset-8, 64);
+		if(b instanceof StackVariable v)
+			b = new Address(RBP, null, 0, -v.stackOffset-8, 64);
+		
+		
+		if(a instanceof Address a1 && b instanceof Address a2)
+			return new Instruction[] {new Mov(RAX, b), new BinOp(op, a, RAX)};
+		return new Instruction[] {new BinOp(op, a, b)};
+	}
+	Instruction[] add(Arg a, long val) {
+		return binOp(0, a, val);
+	}
+	Instruction[] add(Arg a, Arg b) {
+		return binOp(0, a, b);
+	}
+	Instruction[] sub(Arg a, long val) {
+		return new Instruction[] {new BinOp(5, a, new Immediate(val))};
+	}
+	Instruction[] returnV(StackVariable v) {
+		return new Instruction[] {
+				new Mov(RAX, new Address(RBP, null, 0, -v.stackOffset-8, 64)),
+				new Mov(RSP, RBP),
+				new Pop(RBP),
+				new Ret()
+		};
+	}
+	Instruction[] ret(long val) {
+		return new Instruction[] {
+				new Mov(RAX, new Immediate(val)),
+				new Ret()
+		};
 	}
 	Instruction[] ret() {
-		return new Instruction[] {new Ret(null)};
+		return new Instruction[] {new Ret()};
 	}
+	
+	
 	
 	public static byte[] toArr(String s) {
 		s=s.trim();
@@ -220,13 +342,16 @@ public class NaiveAssembler {
 		return data;
 	}
 	NaiveAssembler(){
+		StackVariable varA = new StackVariable("a", 64, 0);
+		StackVariable varB = new StackVariable("b", 64, 8);
 		Instruction[][] instrs = {
-				mov(RAX, 5),
-				alloc(new Variable("i", 64)),
-
-				add(RAX, 5),
-				sub(RAX, 5),
-				ret()
+				prolog(),
+				alloc(varA),
+				alloc(varB),
+				mov(varA, 5),
+				mov(varB, 10),
+				add(varA, varB),
+				returnV(varA)
 		};
 		
 		for(Instruction[] is : instrs)
@@ -273,7 +398,12 @@ public class NaiveAssembler {
 					System.out.print(Integer.toHexString((b&255)|0x100).substring(1) + " ");
 				System.out.println();
 			}
-
+		
+		try (FileOutputStream fos = new FileOutputStream("compiled\\code.hexe")) {
+			fos.write(bytes);
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
 		for(int repeat = 0; repeat < 1; repeat++) {
 			long start = System.nanoTime();
 			try {

@@ -603,6 +603,7 @@ public class Lexer {
 			"struct",
 			"acls", //Anonymous class
 			"astc", //Anonymous struct
+			"property",
 			
 			
 			"and",
@@ -657,16 +658,14 @@ public class Lexer {
 	}));
 	public static Set<String> keywordUnOps = new HashSet<String>(Arrays.asList(new String[] {
 			"not",
-			
-			
+
 			"print",
 			"return",
 	}));
 	public static Set<String> keywordFuncOps = new HashSet<String>(Arrays.asList(new String[] {		
-
 			"new",
 			"ans",
-			
+
 			"public"
 	}));
 	public static Set<String> keywordLit= new HashSet<String>(Arrays.asList(new String[] {

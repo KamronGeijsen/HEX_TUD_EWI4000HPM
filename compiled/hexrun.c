@@ -1,8 +1,26 @@
 #include <stdio.h>
 #include <windows.h>
-#include <stdint.h>  // For using int64_t
 
 typedef unsigned long long u64;
+
+
+void print(u64 v) {
+    printf("> %llu\n", v);
+}
+
+u64 scan() {
+    u64 v;
+    scanf("%llu", &v);
+    return v;
+}
+
+void* alloc(u64 size) {
+    return malloc(size);
+}
+
+void dealloc(u64* ptr) {
+    free(ptr);
+}
 
 
 int main(int argc, char* argv[]) {

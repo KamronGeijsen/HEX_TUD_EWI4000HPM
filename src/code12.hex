@@ -1,4 +1,15 @@
-assertion int powerOfTwo: x in {1,2,4,8,16,32,64,128,256,512,1024,2048,4096,8192,16384, 32768, 65536}
+property powerOfTwo int x: x in (1,2,4,8,16,32,64,128,256,512,1024,2048,4096,8192,16384, 32768, 65536)
+
+
+int a = 5 * inc a + 2
+Point p = new Point (1, 2).x
+
+
+//
+//property const {
+//  can not be re-assigned    (const int a = 10; a = 5 !)
+//  cannot be casted to mutable ((const int*) a = null; int* b = a !) 
+//}
 
 fn mod (int num, int mod) -> int:
 	return num % mod

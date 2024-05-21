@@ -89,95 +89,92 @@ public class NaivePolisher {
 	}
 
 	Block unorderedDefinitions(Block b, Scope s) {
-		if(b instanceof CoreOp p) {
-			
-		}
-//		if(b instanceof CoreOp) {
-//			CoreOp p = (CoreOp) b;
-//			for(int i = 0; i < p.operands.size(); i++)
-//				p.operands.set(i, unorderedDefinitions(p.operands.get(i), s));
-//		} else if (b instanceof CoreFunctionCall) {
-//			CoreFunctionCall p = (CoreFunctionCall) b;
-//			p.function = unorderedDefinitions(p.function, s);
-//			p.argument = unorderedDefinitions(p.argument, s);
-//		} else if (b instanceof Symbol) {
-//		} else if (b instanceof CurlyBracketParse) {
-//			ArrayList<Block> l = ((CurlyBracketParse)b).expressions;
-//			for(int i = 0; i < l.size(); i++) {
-//				l.set(i, unorderedDefinitions(l.get(i), s));
-//			}
-//		} else if (b instanceof SquareBracketParse) {
-//			ArrayList<Block> l = ((SquareBracketParse)b).expressions;
-//			for(int i = 0; i < l.size(); i++) {
-//				l.set(i, unorderedDefinitions(l.get(i), s));
-//			}
-//		} else if (b instanceof CoreFunctionDefinition) {
-//			CoreFunctionDefinition p = (CoreFunctionDefinition) b;
-//			Scope body = new Scope(s);
-//			ArrayList<LocalVariable> paramsType = new ArrayList<>(), returnsType = new ArrayList<>();
-//			if(p.funType instanceof CoreOp && ((CoreOp)p.funType).s.contentEquals("->")) {
-//				Block params = subst(((CoreOp)p.funType).operands.get(0), s);
-//				Block returns = subst(((CoreOp)p.funType).operands.get(1), s);
-//				if(params instanceof InitializeVariable) {
-//					Variable var = ((InitializeVariable) params).variable;
-////					if(var.s != null)
-//						paramsType.add(body.init(var.s, var.type));
-//				} else if(params instanceof InitializeStructVariable) {
-//					for(Variable var : ((InitializeStructVariable) params).variables) {
-////						if(var.s != null)
-//							paramsType.add(body.init(var.s, var.type));
-//					}
-//				} else throw new RuntimeException("Expected a Type, instead got: " + params.getClass() + "\t" + params); 
-//
-//				if(returns instanceof InitializeVariable) {
-//					Variable var = ((InitializeVariable) returns).variable;
+		if(b instanceof CoreOp) {
+			CoreOp p = (CoreOp) b;
+			for(int i = 0; i < p.operands.size(); i++)
+				p.operands.set(i, unorderedDefinitions(p.operands.get(i), s));
+		} else if (b instanceof CoreFunctionCall) {
+			CoreFunctionCall p = (CoreFunctionCall) b;
+			p.function = unorderedDefinitions(p.function, s);
+			p.argument = unorderedDefinitions(p.argument, s);
+		} else if (b instanceof Symbol) {
+		} else if (b instanceof CurlyBracketParse) {
+			ArrayList<Block> l = ((CurlyBracketParse)b).expressions;
+			for(int i = 0; i < l.size(); i++) {
+				l.set(i, unorderedDefinitions(l.get(i), s));
+			}
+		} else if (b instanceof SquareBracketParse) {
+			ArrayList<Block> l = ((SquareBracketParse)b).expressions;
+			for(int i = 0; i < l.size(); i++) {
+				l.set(i, unorderedDefinitions(l.get(i), s));
+			}
+		} else if (b instanceof CoreFunctionDefinition) {
+			CoreFunctionDefinition p = (CoreFunctionDefinition) b;
+			Scope body = new Scope(s);
+			ArrayList<LocalVariable> paramsType = new ArrayList<>(), returnsType = new ArrayList<>();
+			if(p.funType instanceof CoreOp && ((CoreOp)p.funType).s.contentEquals("->")) {
+				Block params = subst(((CoreOp)p.funType).operands.get(0), s);
+				Block returns = subst(((CoreOp)p.funType).operands.get(1), s);
+				if(params instanceof InitializeVariable) {
+					Variable var = ((InitializeVariable) params).variable;
 //					if(var.s != null)
-//						returnsType.add(body.init(var.s, var.type));
-//				} else if(returns instanceof InitializeStructVariable) {
-//					for(Variable var : ((InitializeStructVariable) returns).variables) {
+						paramsType.add(body.init(var.s, var.type));
+				} else if(params instanceof InitializeStructVariable) {
+					for(Variable var : ((InitializeStructVariable) params).variables) {
 //						if(var.s != null)
-//							returnsType.add(body.init(var.s, var.type));
-//					}
-//				} else throw new RuntimeException("Expected a Type, instead got: " + returns.getClass() + "\t" + returns);
-//			} else {
-//				System.out.println("None!");
-//				
-//				Block params = subst(p.funType, s);
-//				if(params instanceof InitializeVariable) {
-//					Variable var = ((InitializeVariable) params).variable;
-////					if(var.s != null)
-//						paramsType.add(body.init(var.s, var.type));
-//				} else if(params instanceof InitializeStructVariable) {
-//					for(Variable var : ((InitializeStructVariable) params).variables) {
-////						if(var.s != null)
-//							paramsType.add(body.init(var.s, var.type));
-//					}
-//				} else throw new RuntimeException("Expected a Type, instead got: " + params.getClass() + "\t" + params);
-//			}
-//			System.out.println("Params:" + paramsType);
-//			System.out.println("Return:" + returnsType);
-//			Function f = new Function(new FunctionType(p.name, new StructureType(paramsType), new StructureType(returnsType)), body, p.name);
-//			allFunctionDefinitions.add(f);
-//			s.addValue(p.name, f);
-//			body = polish((CurlyBracketParse)p.body, s, body);
-//			return new AccessValue(f);
-//		} else if (b instanceof CoreClassDefinition) {
-//			CoreClassDefinition deftype = (CoreClassDefinition) b;
-//			s.addValue(deftype.name, new Type(0, deftype.name));
-////			s.add(deftype.name);
-//			return new AccessValue(new Type(0, deftype.name));
-//		} else if (b instanceof CoreWhileStatement) {
-//			CoreWhileStatement statement = (CoreWhileStatement) b;
-//			statement.body = unorderedDefinitions(statement.body, s);
-//		} else if (b instanceof CoreForStatement) {
-//			CoreForStatement statement = (CoreForStatement) b;
-//			statement.body = unorderedDefinitions(statement.body, s);
-//		} else if (b instanceof CoreIfStatement) {
-//			CoreIfStatement statement = (CoreIfStatement) b;
-//			statement.body = unorderedDefinitions(statement.body, s);
-//		} else
-//			throw new RuntimeException("Not implemented: " + b.getClass() + "\t" + b);
-//		return b;
+							paramsType.add(body.init(var.s, var.type));
+					}
+				} else throw new RuntimeException("Expected a Type, instead got: " + params.getClass() + "\t" + params); 
+
+				if(returns instanceof InitializeVariable) {
+					Variable var = ((InitializeVariable) returns).variable;
+					if(var.s != null)
+						returnsType.add(body.init(var.s, var.type));
+				} else if(returns instanceof InitializeStructVariable) {
+					for(Variable var : ((InitializeStructVariable) returns).variables) {
+						if(var.s != null)
+							returnsType.add(body.init(var.s, var.type));
+					}
+				} else throw new RuntimeException("Expected a Type, instead got: " + returns.getClass() + "\t" + returns);
+			} else {
+				System.out.println("None!");
+				
+				Block params = subst(p.funType, s);
+				if(params instanceof InitializeVariable) {
+					Variable var = ((InitializeVariable) params).variable;
+//					if(var.s != null)
+						paramsType.add(body.init(var.s, var.type));
+				} else if(params instanceof InitializeStructVariable) {
+					for(Variable var : ((InitializeStructVariable) params).variables) {
+//						if(var.s != null)
+							paramsType.add(body.init(var.s, var.type));
+					}
+				} else throw new RuntimeException("Expected a Type, instead got: " + params.getClass() + "\t" + params);
+			}
+			System.out.println("Params:" + paramsType);
+			System.out.println("Return:" + returnsType);
+			Function f = new Function(new FunctionType(p.name, new StructureType(paramsType), new StructureType(returnsType)), body, p.name);
+			allFunctionDefinitions.add(f);
+			s.addValue(p.name, f);
+			body = polish((CurlyBracketParse)p.body, s, body);
+			return new AccessValue(f);
+		} else if (b instanceof CoreClassDefinition) {
+			CoreClassDefinition deftype = (CoreClassDefinition) b;
+			s.addValue(deftype.name, new Type(0, deftype.name));
+//			s.add(deftype.name);
+			return new AccessValue(new Type(0, deftype.name));
+		} else if (b instanceof CoreWhileStatement) {
+			CoreWhileStatement statement = (CoreWhileStatement) b;
+			statement.body = unorderedDefinitions(statement.body, s);
+		} else if (b instanceof CoreForStatement) {
+			CoreForStatement statement = (CoreForStatement) b;
+			statement.body = unorderedDefinitions(statement.body, s);
+		} else if (b instanceof CoreIfStatement) {
+			CoreIfStatement statement = (CoreIfStatement) b;
+			statement.body = unorderedDefinitions(statement.body, s);
+		} else
+			throw new RuntimeException("Not implemented: " + b.getClass() + "\t" + b);
+		return b;
 	}
 	
 	ArrayList<Block> parseComma(Block b) {
