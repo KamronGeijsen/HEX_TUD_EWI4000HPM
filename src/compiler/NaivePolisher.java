@@ -32,10 +32,10 @@ public class NaivePolisher {
 //	static File inputFile = new File("src/code6.hex");
 //	static File inputFile = new File("src/fibonacci.hex");
 //	static File inputFile = new File("src/primes.hex");
-	static File inputFile = new File("src/code10.hex");
+	static File inputFile = new File("src/code12.hex");
 //	static File inputFile = new File("src/factorial.hex");
 	
-	static ArrayList<Function> allFunctionDefinitions = new ArrayList<NaivePolisher.Function>();
+	ArrayList<Function> allFunctionDefinitions = new ArrayList<NaivePolisher.Function>();
 	
 	public static void main(String[] args) throws IOException {
 		String fileContent = new String(Files.readAllBytes(inputFile.toPath())) + " ";
@@ -56,7 +56,7 @@ public class NaivePolisher {
 		System.out.println("Polished:\n" + s.toParseString()+"\n");
 		
 //		System.out.println(s.toParseString());
-		for(Function f : allFunctionDefinitions) {
+		for(Function f : polisher.allFunctionDefinitions) {
 			System.out.println("fn @" + f.s + "(" + f.type + ")" + f.body.toParseString());
 		}
 		
@@ -112,9 +112,10 @@ public class NaivePolisher {
 			CoreFunctionDefinition p = (CoreFunctionDefinition) b;
 			Scope body = new Scope(s);
 			ArrayList<LocalVariable> paramsType = new ArrayList<>(), returnsType = new ArrayList<>();
-			if(p.funType instanceof CoreOp && ((CoreOp)p.funType).s.contentEquals("->")) {
-				Block params = subst(((CoreOp)p.funType).operands.get(0), s);
-				Block returns = subst(((CoreOp)p.funType).operands.get(1), s);
+			if(p.funType instanceof CoreOp fnt && fnt.s.contentEquals("->")) {
+				Block params = subst(fnt.operands.get(0), s);
+				
+				Block returns = subst(fnt.operands.get(1), s);
 				if(params instanceof InitializeVariable) {
 					Variable var = ((InitializeVariable) params).variable;
 //					if(var.s != null)
@@ -209,7 +210,6 @@ public class NaivePolisher {
 //				if(var.s != null)
 					variables.add(s.init(var.s, var.type));
 			}
-			System.out.println(variables);
 			return new AccessValue(new Structure(variables));
 //			return new AccessValue(new Structure(((InitializeStructVariable) b).variables));
 		} else if(b instanceof CoreOp) {
@@ -243,17 +243,16 @@ public class NaivePolisher {
 	}
 	Block subst(Block b, Scope s) {
 //		System.out.println(b.toParseString());
-		if(b instanceof CoreOp && ((CoreOp) b).s.contentEquals(",")) {
-			CoreOp p = (CoreOp) b;
+		if(b instanceof CoreOp p && p.s.contentEquals(",")) {
 			ArrayList<Block> commas = parseComma(p), exprs = new ArrayList<>();
 			ArrayList<LocalVariable> variables = new ArrayList<>();
 			for(Block c : commas) {
 				c = subst(c, s);
 				exprs.add(c);
-				if(c instanceof AccessValue && ((AccessValue) c).value instanceof Type) {
-					variables.add(new LocalVariable((Type) ((AccessValue) c).value, 0, null));
-				} else if(c instanceof InitializeVariable) {
-					variables.add((LocalVariable) ((InitializeVariable) c).variable);
+				if(c instanceof AccessValue av && av.value instanceof Type avt) {
+					variables.add(new LocalVariable(avt, 0, null));
+				} else if(c instanceof InitializeVariable iv) {
+					variables.add((LocalVariable) iv.variable);
 				}
 			}
 			if(variables.size() != commas.size()) {
@@ -265,7 +264,6 @@ public class NaivePolisher {
 			Block b1, b2;
 			p.operands.set(0, b1 = subst(p.operands.get(0), s));
 			p.operands.set(1, b2 = subst(p.operands.get(1), s));
-			System.out.println(b1.getClass() + "\t" + b1);
 			if(b1 instanceof InitializeVariable) {
 				
 //				if(b2 instanceof )
@@ -598,152 +596,42 @@ public class NaivePolisher {
 	}
 	
 
+	static abstract class Assertion {
+		
+	}
 	static abstract class Value {
-		final String name;
-		final ArrayList<Property> properties;
+		String s;
+		final Type type;
 		
 		
-		public Value() {
-			this("_");
-		}
-		public Value(String name, Type type){
-			this.name = name;
-			properties = new ArrayList<>();
-			properties.add(type);
-		}
-		public Value(String name){
-			this.name = name;
-			properties = new ArrayList<>();
+		public Value(Type type){
+			this.type = type;
 		}
 	}
-	
-	static abstract class Property extends Value {
-		static final Property META_PROPERTY = metaProperty();
+
+
+	static class Type extends Value {
 		
-		static Property metaProperty() {
-			Property p = new Type("Property");
-			p.properties.add(p);
-			return p;
+		static final int POINTER_SIZE = 32;
+		static final int CHAR_SIZE = 8;
+		static final Type metaType = new Type(POINTER_SIZE, "Type");
+		final int size;
+		
+		Type(int size){
+			super(metaType);
+			this.size = size;
 		}
-		public Property() {
-			super();
+		Type(int size, String s){
+			super(metaType);
+			this.size = size;
+			this.s = s;
 		}
 		
-		public Property(String name) {
-			super(name);
-		}
-	}
-	
-	static class UnityProperty extends Property {
-		ArrayList<Property> properties;
-		
-		public UnityProperty(){
-			super("Union");
-		}
-	}
-	
-	static class Type extends Property {
-		public Type() {
-			super();
-		}
-		
-		public Type(String name) {
-			super(name);
-		}
-	}
-	
-	static class PointerType extends Type {
-		final Property p;
-	}
-	
-	static class StructType extends Type {
-		ArrayList<Property> elements;
-	}
-	
-	static class FunctionType extends Type {
-		StructType args;
-		StructType rets;
-		public FunctionType() {
-			super();
-		}
-	}
-	
-	static class PrimitiveType extends Type {
-		
-	}
-	
-	static class UserType extends Type {
-		
-	}
-	
-	static abstract class SizeProperty extends Property {
-		
-		abstract long getSize();
-		public SizeProperty() {
-			super();
-		}
-		public SizeProperty(String name) {
-			super(name);
-		}
-	}
-	
-	static class CompiletimeStaticSize extends SizeProperty {
-		long size;
 		@Override
-		long getSize() {
-			return size;
-		}
-		public CompiletimeStaticSize() {
-			super("CompiletimeStaticSize");
+		public String toString() {
+			return s;
 		}
 	}
-	static class MethodsProperty extends Property {
-		
-	}
-	static class FieldsProperty extends Property {
-		
-	}
-	static class CompiletimeStaticFields extends FieldsProperty {
-		
-	}
-	
-//	static abstract class StructElement {
-//		
-//	}
-//	static class StructElementOrdered extends StructElement {
-//		Property val;
-//	}
-//	static class StructElementKeyword extends StructElement {
-//		String key;
-//		Property val;
-//	}
-//	static class StructElementKeywordUnordered extends StructElement {
-//		
-//	}
-	
-	
-//	static class Type extends Value {
-//		
-//		static final int POINTER_SIZE = 32;
-//		static final int CHAR_SIZE = 8;
-//		static final Type metaType = new Type(POINTER_SIZE, "Type");
-//		final int size;
-//		
-//		Type(int size){
-//			super(metaType);
-//			this.size = size;
-//		}
-//		Type(int size, String s){
-//			super(metaType);
-//			this.size = size;
-//			this.s = s;
-//		}
-//		
-//		@Override
-//		public String toString() {
-//			return s;
-//		}
-//	}
 	static class StructureType extends Type {
 		ArrayList<LocalVariable> variables;
 		
@@ -945,26 +833,26 @@ public class NaivePolisher {
 	}
 	
 	static enum BuiltInType {
-		TYPE(new Type(0, "Type")),			// Ptr<>
-		VARIABLE(new Type(0, "Variable")),	// ?
-		FUNCTION(new Type(0, "Function")),	// Ptr<>
-		ANY(new Type(0, "Any")),			// Ptr<>
+		TYPE(new Type(0, "Type")),
+		VARIABLE(new Type(0, "Variable")),
+		FUNCTION(new Type(0, "Function")),
+		ANY(new Type(0, "Any")),
 		
-		CHAR(new Type(Type.CHAR_SIZE, "char")),		// Primitive Char
-		BOOL(new Type(1, "bool")),					// Primitive Boolean
-		NUM(new Type(Type.POINTER_SIZE, "num")),	// Primitive Num
+		CHAR(new Type(Type.CHAR_SIZE, "char")),
+		BOOL(new Type(1, "bool")),
+		NUM(new Type(Type.POINTER_SIZE, "num")),
 		
-		BIT(new Type(1, "bit")),		// Primitive Num Int(1-bit)
-		COUPLE(new Type(2, "couple")),	// Primitive Num Int(2-bit)
-		NIBBLE(new Type(4, "nibble")),	// Primitive Num Int(4-bit)
-		BYTE(new Type(8, "byte")),		// Primitive Num Int(8-bit)
-		SHORT(new Type(16, "short")),	// Primitive Num Int(16-bit)
-		INT(new Type(32, "int")), 		// Primitive Num Int(32-bit)
-		LONG(new Type(64, "long")),		// Primitive Num Int(64-bit)
-		BULK(new Type(128, "bulk")),	// Primitive Num Int(128-bit)
+		BIT(new Type(1, "bit")),
+		COUPLE(new Type(2, "couple")),
+		NIBBLE(new Type(4, "nibble")),
+		BYTE(new Type(8, "byte")),
+		SHORT(new Type(16, "short")),
+		INT(new Type(32, "int")),
+		LONG(new Type(64, "long")),
+		BULK(new Type(128, "bulk")),
 		
-		LITERAL(new Type(Type.POINTER_SIZE, "lit")), // Ptr Literal
-		STRINGLITERAL(new Type(Type.POINTER_SIZE, "StringLit")), // Ptr Literal Ptr<Literal Char>
+		LITERAL(new Type(Type.POINTER_SIZE, "lit")),
+		STRINGLITERAL(new Type(Type.POINTER_SIZE, "StringLit")),
 		;
 		
 		String name;
