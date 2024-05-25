@@ -644,6 +644,8 @@ public class Lexer {
 			"bool",
 			"num",
 			"char",
+			
+			"void",
 	}));
 	public static Set<String> keywordBinOps= new HashSet<String>(Arrays.asList(new String[] {
 			"and",

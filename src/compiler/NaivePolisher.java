@@ -118,7 +118,7 @@ public class NaivePolisher {
 				Block returns = subst(fnt.operands.get(1), s);
 				if(params instanceof InitializeVariable) {
 					Variable var = ((InitializeVariable) params).variable;
-//					if(var.s != null)
+					if(!var.type.s.equals("void"))
 						paramsType.add(body.init(var.s, var.type));
 				} else if(params instanceof InitializeStructVariable) {
 					for(Variable var : ((InitializeStructVariable) params).variables) {
@@ -834,6 +834,7 @@ public class NaivePolisher {
 	
 	static enum BuiltInType {
 		TYPE(new Type(0, "Type")),
+		VOID(new Type(0, "void")),
 		VARIABLE(new Type(0, "Variable")),
 		FUNCTION(new Type(0, "Function")),
 		ANY(new Type(0, "Any")),

@@ -10,7 +10,10 @@ import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.file.Files;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Scanner;
 
 import compiler.Lexer.CurlyBracketParse;
@@ -27,6 +30,10 @@ public class MicroAssembler {
 			this.reg = reg;
 			this.size = (Integer) size;
 		}
+		@Override
+		public String toString() {
+			return "%"+"rax rcx rdx rbx rsp rbp rsi rdi r8 r9 r10 r11 r12 r14 r15".split(" ")[reg];
+		}
 	}
 	class Address extends Arg {
 		Register base;
@@ -39,6 +46,19 @@ public class MicroAssembler {
 			this.scale = scale;
 			this.offset = offset;
 			this.size = size;
+		}
+		@Override
+		public String toString() {
+//			StringBuilder sb = new StringBuilder();
+			ArrayList<String> args = new ArrayList<>();
+			if(base != null)
+				args.add(base+"");
+			if(index != null)
+				if(scale == 1) args.add(index+"");
+				else args.add(index+"*"+scale);
+			if(offset != 0 || args.size() == 0)
+				args.add(offset+"");
+			return "["+String.join("+", args)+"]";
 		}
 	}
 	class Variable extends Arg {
@@ -61,6 +81,10 @@ public class MicroAssembler {
 		public Immediate(long val) {
 			this.val = val;
 		}
+		@Override
+		public String toString() {
+			return ""+val;
+		}
 	}
 	class Label extends Arg {
 
@@ -71,8 +95,40 @@ public class MicroAssembler {
 		byte[] bytes;
 		
 		abstract void compile();
+		void updateAddress() {};
 	}
 	
+//	class Goto extends Instruction {
+//		
+//	}
+	
+	class DirectBytes extends Instruction {
+
+		final String toPrint;
+		public DirectBytes(byte[] bytes, String toPrint) {
+			this.bytes = bytes;
+			this.toPrint = toPrint;
+		}
+		public DirectBytes(byte[] bytes) {
+			this.bytes = bytes;
+			this.toPrint = null;
+		}
+		@Override
+		void compile() {}
+		
+		@Override
+		public String toString() {
+			
+			if(toPrint == null) {
+				StringBuilder sb = new StringBuilder("bytes\t");
+				for(byte b : bytes) {
+					sb.append("%02x ".formatted(b));
+				}
+				return sb.toString();
+			}
+			return toPrint;
+		}
+	}
 	class Mod extends Instruction {
 		void compile() {
 			bytes = new byte[] { 0x48, (byte)0x99, 0x48, (byte)0xF7, (byte)0xFE, 0x48, (byte)0x89, (byte)0xD0 };
@@ -111,6 +167,10 @@ public class MicroAssembler {
 				mr(bb, s.reg, src);
 			}
 			bytes = Arrays.copyOf(bb.array(), bb.position());
+		}
+		@Override
+		public String toString() {
+			return "mov\t"+dst+", " + src;
 		}
 	}
 	class BinOp extends Instruction {
@@ -172,6 +232,10 @@ public class MicroAssembler {
 			
 			bytes = Arrays.copyOf(bb.array(), bb.position());
 		}
+		@Override
+		public String toString() {
+			return "add or adc sbb and sub xor cmp".split(" ")[op]+"\t"+dst+", " + src;
+		}
 	}
 	class Push extends Instruction {
 		Arg src;
@@ -180,8 +244,23 @@ public class MicroAssembler {
 		}
 		@Override
 		void compile() {
-			System.out.println(src);
-			if(src instanceof Register r) {
+//			System.out.println(src);
+			if(src instanceof Immediate i) {
+
+				ByteBuffer bb = ByteBuffer.allocate(256);
+				if(i.val == (long)(byte)i.val) {
+					bb.put((byte)0x6a);
+					bb.put((byte)i.val);
+					
+				} else if(i.val == (long)(int)i.val) {
+					bb.put((byte)0x68);
+					bb.putInt((int)i.val);
+				} else
+					throw new RuntimeException("Invalid operand: " + i);
+
+				bytes = Arrays.copyOf(bb.array(), bb.position());
+				
+			} else if(src instanceof Register r) {
 				bytes = new byte[] {(byte) (0x50 + r.reg)};
 			} else {
 
@@ -194,7 +273,10 @@ public class MicroAssembler {
 				bytes = Arrays.copyOf(bb.array(), bb.position());
 			}
 		}
-
+		@Override
+		public String toString() {
+			return "push\t" + src;
+		}
 	}
 	class Pop extends Instruction {
 		Arg dst;
@@ -216,16 +298,19 @@ public class MicroAssembler {
 				bytes = Arrays.copyOf(bb.array(), bb.position());
 			}
 		}
-
+		@Override
+		public String toString() {
+			return "pop\t"+dst;
+		}
 	}
 	class Call extends Instruction {
-		Arg src;
-		public Call(Arg fn, Arg ... args) {
-			this.src = src;
+		Arg fn;
+		public Call(Arg fn) {
+			this.fn = fn;
 		}
 		@Override
 		void compile() {
-			if(src instanceof Register r) {
+			if(fn instanceof Register r) {
 				bytes = new byte[] {(byte) (0x50 + r.reg)};
 			}
 		}
@@ -237,21 +322,40 @@ public class MicroAssembler {
 		void compile() {
 			bytes = new byte[] {(byte) 0xC3};
 		}
-		
+		@Override
+		public String toString() {
+			return "ret";
+		}	
 	}
 	void mr(ByteBuffer bb, int r, Arg mr) {
 		if(mr instanceof Register s) {
 			bb.put((byte) (0xC0 + (r << 3) + s.reg));
 		} else if(mr instanceof Address a) {
-			if(a.offset == 0 && a.base.reg != 5) {
-				bb.put((byte) (0x00 + (r << 3) + a.base.reg));
-			} else if(a.offset == (int)(byte)a.offset) {
-				bb.put((byte) (0x40 + (r << 3) + a.base.reg));
-				bb.put((byte) a.offset);
-			}  else {
-				bb.put((byte) (0x80 + (r << 3) + a.base.reg));
-				bb.putInt(a.offset);
+			if(a.base == RSP) {
+				if(a.offset == 0 && a.base.reg != 5) {
+					bb.put((byte) (0x00 + (r << 3) + a.base.reg));
+					bb.put((byte)0x24);
+				} else if(a.offset == (int)(byte)a.offset) {
+					bb.put((byte) (0x40 + (r << 3) + a.base.reg));
+					bb.put((byte)0x24);
+					bb.put((byte) a.offset);
+				}  else {
+					bb.put((byte) (0x80 + (r << 3) + a.base.reg));
+					bb.put((byte)0x24);
+					bb.putInt(a.offset);
+				}
+			} else {
+				if(a.offset == 0 && a.base.reg != 5) {
+					bb.put((byte) (0x00 + (r << 3) + a.base.reg));
+				} else if(a.offset == (int)(byte)a.offset) {
+					bb.put((byte) (0x40 + (r << 3) + a.base.reg));
+					bb.put((byte) a.offset);
+				}  else {
+					bb.put((byte) (0x80 + (r << 3) + a.base.reg));
+					bb.putInt(a.offset);
+				}
 			}
+			
 		}
 		
 	}
@@ -309,6 +413,9 @@ public class MicroAssembler {
 	Instruction[] mov(Register r, Address addr) {
 		return new Instruction[] {new Mov(r, addr)};
 	}
+	Instruction[] mov(Address addr, Register r) {
+		return new Instruction[] {new Mov(addr, r)};
+	}
 	Instruction[] mov(Register d, Register s) {
 		return new Instruction[] {new Mov(d, s)};
 	}
@@ -327,6 +434,31 @@ public class MicroAssembler {
 			return new Instruction[] {new Mov(RAX, b), new BinOp(op, a, RAX)};
 		return new Instruction[] {new BinOp(op, a, b)};
 	}
+	Instruction[] binOpStack(String op) {
+		Map<String, Integer> op1 = Map.of("+", 0, "|", 1, "&", 4, "-", 5, "^", 6);
+		if(op1.containsKey(op))
+			return new Instruction[] {
+					new Pop(RAX),
+					new BinOp(op1.get(op), new Address(RSP, null, 0, 0, 64), RAX)
+				};
+		if(op.equals("%"))
+			return new Instruction[] {
+					new Pop(RAX),
+					new DirectBytes(new byte[] {0x48, (byte)0x99}, "cqo"), // cqo  (sign extends RAX into RAX:RDX)
+					new DirectBytes(new byte[] {0x48, (byte)0xf7, 0x34, 0x24}, "div\t[rsp]"), // div [rsp]  (RAX,RDX = RAX:RDX / [RSP], RAX:RDX % [RSP])
+					new Mov(new Address(RSP, null, 0, 0, 64), RDX)
+				};
+		if(op.equals("/"))
+			return new Instruction[] {
+					new Pop(RAX),
+					new DirectBytes(new byte[] {0x48, (byte)0x99}, "cqo"), // cqo  (sign extends RAX into RAX:RDX)
+					new DirectBytes(new byte[] {0x48, (byte)0xf7, 0x34, 0x24}, "div\t[rsp]"), // div [rsp]  (RAX,RDX = RAX:RDX / [RSP], RAX:RDX % [RSP])
+					new Mov(new Address(RSP, null, 0, 0, 64), RAX)
+				};
+		
+		throw new RuntimeException("Invalid operation: " + op);
+	}
+	
 	Instruction[] add(Arg a, long val) {
 		return binOp(0, a, val);
 	}
@@ -342,7 +474,15 @@ public class MicroAssembler {
 				new Mov(RSP, RBP),
 				new Pop(RBP),
 				new Ret()
-		};
+			};
+	}
+	Instruction[] returnV(Address a) {
+		return new Instruction[] {
+				new Mov(RAX, a),
+				new Mov(RSP, RBP),
+				new Pop(RBP),
+				new Ret()
+			};
 	}
 	Instruction[] ret(long val) {
 		return new Instruction[] {
@@ -354,7 +494,43 @@ public class MicroAssembler {
 		return new Instruction[] {new Ret()};
 	}
 	
-	
+	enum BinaryOperation {
+		ADD(0),
+		OR(1),
+		ADC(2),
+		SBB(3),
+		AND(4),
+		SUB(5),
+		XOR(6),
+		CMP(7),
+		
+		TEST(0),
+		//  (1),
+		NOT(2),
+		NEG(3),
+		MUL(4),
+		IMUL(5),
+		DIV(6),
+		IDIV(7),
+		
+		ROL(0),
+		ROR(1),
+		RCL(2),
+		RCR(3),
+		SHL(4),
+		SHR(5),
+		SAL(6),
+		SAR(7),
+
+		M_MUL(0),
+		M_DIV(0),
+		M_MOD(0);
+		
+		int i = 0;
+		private BinaryOperation(int i) {
+			this.i = i;
+		}
+	}
 	
 	public static byte[] toArr(String s) {
 		s=s.trim();

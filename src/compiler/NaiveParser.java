@@ -152,7 +152,10 @@ public class NaiveParser {
 			if(p.expressions.size() == 1 && p instanceof ParenthesisParse) {
 				p.expressions.get(0).parent = b.parent;
 				return p.expressions.get(0);
+			} else if(p.expressions.size() == 0 && p instanceof ParenthesisParse) {
+				return new Keyword("void");
 			}
+			
 		}
 		else throw new RuntimeException("Invalid operation: " + b.getClass() + "\t" + b.toParseString());
 		return b;
