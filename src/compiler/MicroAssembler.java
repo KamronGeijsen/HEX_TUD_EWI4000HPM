@@ -12,10 +12,10 @@ import java.nio.ByteOrder;
 import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.Scanner;
 
+import compiler.Lexer.Block;
 import compiler.Lexer.CurlyBracketParse;
 
 public class MicroAssembler {
@@ -47,6 +47,9 @@ public class MicroAssembler {
 			this.offset = offset;
 			this.size = size;
 		}
+		public Address(Register base, int offset, int size) {
+			this(base, null, 0, offset, size);
+		}
 		@Override
 		public String toString() {
 //			StringBuilder sb = new StringBuilder();
@@ -61,21 +64,13 @@ public class MicroAssembler {
 			return "["+String.join("+", args)+"]";
 		}
 	}
-	class Variable extends Arg {
-		String id;
-		Variable(String id, int size){
-			this.id = id;
-			this.size = size;
-		}
-	}
-	class StackVariable extends Variable {
-		final int stackOffset;
-		StackVariable(String id, int size, int stackOffset) {
-			super(id, size);
-			this.stackOffset = stackOffset;
-		}
-		
-	}
+//	class Variable extends Arg {
+//		String id;
+//		Variable(String id, int size){
+//			this.id = id;
+//			this.size = size;
+//		}
+//	}
 	class Immediate extends Arg {
 		long val;
 		public Immediate(long val) {
@@ -87,21 +82,53 @@ public class MicroAssembler {
 		}
 	}
 	class Label extends Arg {
-
+		Block b;
+		public Label(Block b) {
+			this.b = b;
+		}
+		@Override
+		public boolean equals(Object obj) {
+			if(obj instanceof Label l)
+				return l.b == b;
+			else return false;
+		}
+		@Override
+		public int hashCode() {
+			return b.hashCode();
+		}
 	}
 	
 	abstract class Instruction {
-		int macroAddr;
 		byte[] bytes;
 		
 		abstract void compile();
-		void updateAddress() {};
+		void updateLabel(Map<Label, Integer> labelOffset, int relIP) {};
 	}
 	
 //	class Goto extends Instruction {
 //		
 //	}
-	
+	class InstructionBlock extends Instruction {
+		
+		Instruction[] instructions;
+		public InstructionBlock(Instruction... instructions) {
+			this.instructions = instructions;
+		}
+		public InstructionBlock(ArrayList<Instruction> instructions) {
+			this.instructions = instructions.toArray(n -> new Instruction[n]);
+		}
+		
+		@Override
+		void compile() {
+			for(Instruction i : instructions)
+				i.compile();
+		}
+		
+		@Override
+		void updateLabel(Map<Label, Integer> labelOffset, int relIP) {
+//			for()
+		}
+	}
 	class DirectBytes extends Instruction {
 
 		final String toPrint;
@@ -312,7 +339,21 @@ public class MicroAssembler {
 		void compile() {
 			if(fn instanceof Register r) {
 				bytes = new byte[] {(byte) (0x50 + r.reg)};
+			} else if(fn instanceof Label l) {
+				bytes = new byte[] {(byte) 0xe8,0,0,0,0};
 			}
+		}
+		
+		void updateLabel(Map<Label, Integer> labelOffset, int currIP) {
+			if(fn instanceof Label l) {
+				int value = labelOffset.get(l)-currIP;
+				System.out.println(labelOffset.get(l)+"\t"+currIP+"\t"+value);
+				bytes[1] = (byte)((value>>0)&0xff);
+				bytes[2] = (byte)((value>>8)&0xff);
+				bytes[3] = (byte)((value>>16)&0xff);
+				bytes[4] = (byte)((value>>24)&0xff);
+			}
+			
 		}
 	}
 	class Ret extends Instruction {
@@ -378,121 +419,133 @@ public class MicroAssembler {
 	Register R15 = new Register(15, 64);
 
 	
-	
-	Instruction[] prolog() {
-		return new Instruction[] {
-			new Push(RBP),
-			new Mov(RBP, RSP),
-		};
+	Instruction prolog() {
+		return new InstructionBlock(
+				new Push(RBP),
+				new Mov(RBP, RSP)
+				);
 	}
-	Instruction[] epilog() {
-		return new Instruction[] { 
-			new Mov(RSP, RBP),
-			new Pop(RBP)
-		};
-	}
-	Instruction[] alloc(StackVariable v) {
-		return new Instruction[] { new BinOp(5, RSP, new Immediate(v.size/8)) };
-	}
-	Instruction[] dealloc(StackVariable v) {
-		return new Instruction[] { new BinOp(0, RSP, new Immediate(v.size/8)) };
-	}
-	
-	Instruction[] mov(Register r, long val) {
-		return new Instruction[] {new Mov(r, new Immediate(val))};
-	}
-	Instruction[] mov(StackVariable v, long val) {
-		return new Instruction[] {new Mov(new Address(RBP, null, 0, -v.stackOffset-8, 64), new Immediate(val))};
-	}
-	Instruction[] mov(StackVariable v, Register r) {
-		return new Instruction[] {new Mov(new Address(RBP, null, 0, -v.stackOffset-8, 64), r)};
-	}
-	Instruction[] mov(Register r, StackVariable v) {
-		return new Instruction[] {new Mov(r, new Address(RBP, null, 0, -v.stackOffset-8, 64))};
-	}
-	Instruction[] mov(Register r, Address addr) {
-		return new Instruction[] {new Mov(r, addr)};
-	}
-	Instruction[] mov(Address addr, Register r) {
-		return new Instruction[] {new Mov(addr, r)};
-	}
-	Instruction[] mov(Register d, Register s) {
-		return new Instruction[] {new Mov(d, s)};
-	}
-	
-	Instruction[] binOp(int op, Arg a, long val) {
-		return new Instruction[] {new BinOp(op, a, new Immediate(val))};
-	}
-	Instruction[] binOp(int op, Arg a, Arg b) {
-		if(a instanceof StackVariable v)
-			a = new Address(RBP, null, 0, -v.stackOffset-8, 64);
-		if(b instanceof StackVariable v)
-			b = new Address(RBP, null, 0, -v.stackOffset-8, 64);
-		
-		
-		if(a instanceof Address a1 && b instanceof Address a2)
-			return new Instruction[] {new Mov(RAX, b), new BinOp(op, a, RAX)};
-		return new Instruction[] {new BinOp(op, a, b)};
-	}
-	Instruction[] binOpStack(String op) {
-		Map<String, Integer> op1 = Map.of("+", 0, "|", 1, "&", 4, "-", 5, "^", 6);
-		if(op1.containsKey(op))
-			return new Instruction[] {
-					new Pop(RAX),
-					new BinOp(op1.get(op), new Address(RSP, null, 0, 0, 64), RAX)
-				};
-		if(op.equals("%"))
-			return new Instruction[] {
-					new Pop(RAX),
-					new DirectBytes(new byte[] {0x48, (byte)0x99}, "cqo"), // cqo  (sign extends RAX into RAX:RDX)
-					new DirectBytes(new byte[] {0x48, (byte)0xf7, 0x34, 0x24}, "div\t[rsp]"), // div [rsp]  (RAX,RDX = RAX:RDX / [RSP], RAX:RDX % [RSP])
-					new Mov(new Address(RSP, null, 0, 0, 64), RDX)
-				};
-		if(op.equals("/"))
-			return new Instruction[] {
-					new Pop(RAX),
-					new DirectBytes(new byte[] {0x48, (byte)0x99}, "cqo"), // cqo  (sign extends RAX into RAX:RDX)
-					new DirectBytes(new byte[] {0x48, (byte)0xf7, 0x34, 0x24}, "div\t[rsp]"), // div [rsp]  (RAX,RDX = RAX:RDX / [RSP], RAX:RDX % [RSP])
-					new Mov(new Address(RSP, null, 0, 0, 64), RAX)
-				};
-		
-		throw new RuntimeException("Invalid operation: " + op);
-	}
-	
-	Instruction[] add(Arg a, long val) {
-		return binOp(0, a, val);
-	}
-	Instruction[] add(Arg a, Arg b) {
-		return binOp(0, a, b);
-	}
-	Instruction[] sub(Arg a, long val) {
-		return new Instruction[] {new BinOp(5, a, new Immediate(val))};
-	}
-	Instruction[] returnV(StackVariable v) {
-		return new Instruction[] {
-				new Mov(RAX, new Address(RBP, null, 0, -v.stackOffset-8, 64)),
+	Instruction epilog() {
+		return new InstructionBlock(
 				new Mov(RSP, RBP),
-				new Pop(RBP),
-				new Ret()
-			};
+				new Pop(RBP)
+				);
 	}
-	Instruction[] returnV(Address a) {
-		return new Instruction[] {
-				new Mov(RAX, a),
-				new Mov(RSP, RBP),
-				new Pop(RBP),
-				new Ret()
-			};
-	}
-	Instruction[] ret(long val) {
-		return new Instruction[] {
-				new Mov(RAX, new Immediate(val)),
-				new Ret()
-		};
-	}
-	Instruction[] ret() {
-		return new Instruction[] {new Ret()};
-	}
+	
+//	Instruction[] prolog() {
+//		return new Instruction[] {
+//			new Push(RBP),
+//			new Mov(RBP, RSP),
+//		};
+//	}
+//	Instruction[] epilog() {
+//		return new Instruction[] { 
+//			new Mov(RSP, RBP),
+//			new Pop(RBP)
+//		};
+//	}
+//	Instruction[] alloc(StackVariable v) {
+//		return new Instruction[] { new BinOp(5, RSP, new Immediate(v.size/8)) };
+//	}
+//	Instruction[] dealloc(StackVariable v) {
+//		return new Instruction[] { new BinOp(0, RSP, new Immediate(v.size/8)) };
+//	}
+//	
+//	Instruction[] mov(Register r, long val) {
+//		return new Instruction[] {new Mov(r, new Immediate(val))};
+//	}
+//	Instruction[] mov(StackVariable v, long val) {
+//		return new Instruction[] {new Mov(new Address(RBP, null, 0, -v.stackOffset-8, 64), new Immediate(val))};
+//	}
+//	Instruction[] mov(StackVariable v, Register r) {
+//		return new Instruction[] {new Mov(new Address(RBP, null, 0, -v.stackOffset-8, 64), r)};
+//	}
+//	Instruction[] mov(Register r, StackVariable v) {
+//		return new Instruction[] {new Mov(r, new Address(RBP, null, 0, -v.stackOffset-8, 64))};
+//	}
+//	Instruction[] mov(Register r, Address addr) {
+//		return new Instruction[] {new Mov(r, addr)};
+//	}
+//	Instruction[] mov(Address addr, Register r) {
+//		return new Instruction[] {new Mov(addr, r)};
+//	}
+//	Instruction[] mov(Register d, Register s) {
+//		return new Instruction[] {new Mov(d, s)};
+//	}
+//	
+//	Instruction[] binOp(int op, Arg a, long val) {
+//		return new Instruction[] {new BinOp(op, a, new Immediate(val))};
+//	}
+//	Instruction[] binOp(int op, Arg a, Arg b) {
+//		if(a instanceof StackVariable v)
+//			a = new Address(RBP, null, 0, -v.stackOffset-8, 64);
+//		if(b instanceof StackVariable v)
+//			b = new Address(RBP, null, 0, -v.stackOffset-8, 64);
+//		
+//		
+//		if(a instanceof Address a1 && b instanceof Address a2)
+//			return new Instruction[] {new Mov(RAX, b), new BinOp(op, a, RAX)};
+//		return new Instruction[] {new BinOp(op, a, b)};
+//	}
+//	Instruction[] binOpStack(String op) {
+//		Map<String, Integer> op1 = Map.of("+", 0, "|", 1, "&", 4, "-", 5, "^", 6);
+//		if(op1.containsKey(op))
+//			return new Instruction[] {
+//					new Pop(RAX),
+//					new BinOp(op1.get(op), new Address(RSP, null, 0, 0, 64), RAX)
+//				};
+//		if(op.equals("%"))
+//			return new Instruction[] {
+//					new Pop(RAX),
+//					new DirectBytes(new byte[] {0x48, (byte)0x99}, "cqo"), // cqo  (sign extends RAX into RAX:RDX)
+//					new DirectBytes(new byte[] {0x48, (byte)0xf7, 0x34, 0x24}, "div\t[rsp]"), // div [rsp]  (RAX,RDX = RAX:RDX / [RSP], RAX:RDX % [RSP])
+//					new Mov(new Address(RSP, null, 0, 0, 64), RDX)
+//				};
+//		if(op.equals("/"))
+//			return new Instruction[] {
+//					new Pop(RAX),
+//					new DirectBytes(new byte[] {0x48, (byte)0x99}, "cqo"), // cqo  (sign extends RAX into RAX:RDX)
+//					new DirectBytes(new byte[] {0x48, (byte)0xf7, 0x34, 0x24}, "div\t[rsp]"), // div [rsp]  (RAX,RDX = RAX:RDX / [RSP], RAX:RDX % [RSP])
+//					new Mov(new Address(RSP, null, 0, 0, 64), RAX)
+//				};
+//		
+//		throw new RuntimeException("Invalid operation: " + op);
+//	}
+//	
+//	Instruction[] add(Arg a, long val) {
+//		return binOp(0, a, val);
+//	}
+//	Instruction[] add(Arg a, Arg b) {
+//		return binOp(0, a, b);
+//	}
+//	Instruction[] sub(Arg a, long val) {
+//		return new Instruction[] {new BinOp(5, a, new Immediate(val))};
+//	}
+//	Instruction[] returnV(StackVariable v) {
+//		return new Instruction[] {
+//				new Mov(RAX, new Address(RBP, null, 0, -v.stackOffset-8, 64)),
+//				new Mov(RSP, RBP),
+//				new Pop(RBP),
+//				new Ret()
+//			};
+//	}
+//	Instruction[] returnV(Address a) {
+//		return new Instruction[] {
+//				new Mov(RAX, a),
+//				new Mov(RSP, RBP),
+//				new Pop(RBP),
+//				new Ret()
+//			};
+//	}
+//	Instruction[] ret(long val) {
+//		return new Instruction[] {
+//				new Mov(RAX, new Immediate(val)),
+//				new Ret()
+//		};
+//	}
+//	Instruction[] ret() {
+//		return new Instruction[] {new Ret()};
+//	}
 	
 	enum BinaryOperation {
 		ADD(0),
@@ -542,32 +595,32 @@ public class MicroAssembler {
 		return data;
 	}
 	MicroAssembler(){
-		StackVariable varA = new StackVariable("a", 64, 0);
-		StackVariable varB = new StackVariable("b", 64, 8);
-		Instruction[][] instrs = {
-				prolog(),
-				alloc(varA),
-				alloc(varB),
-				mov(varA, 5),
-				mov(varB, 10),
-				add(varA, varB),
-				returnV(varA)
-		};
+//		StackVariable varA = new StackVariable("a", 64, 0);
+//		StackVariable varB = new StackVariable("b", 64, 8);
+//		Instruction[][] instrs = {
+//				prolog(),
+//				alloc(varA),
+//				alloc(varB),
+//				mov(varA, 5),
+//				mov(varB, 10),
+//				add(varA, varB),
+//				returnV(varA)
+//		};
 		
-		for(Instruction[] is : instrs)
-			for(Instruction i : is) {
-				i.compile();
-			}
-		
-		ByteArrayOutputStream bos = new ByteArrayOutputStream();
-		for(Instruction[] is : instrs)
-			for(Instruction i : is) {
-				try {
-					bos.write(i.bytes);
-				} catch (IOException e) {
-					e.printStackTrace();
-				}
-			}
+//		for(Instruction[] is : instrs)
+//			for(Instruction i : is) {
+//				i.compile();
+//			}
+//		
+//		ByteArrayOutputStream bos = new ByteArrayOutputStream();
+//		for(Instruction[] is : instrs)
+//			for(Instruction i : is) {
+//				try {
+//					bos.write(i.bytes);
+//				} catch (IOException e) {
+//					e.printStackTrace();
+//				}
+//			}
 //		byte[] bytes = bos.toByteArray();
 
 //		byte[] bytes = toArr("488D1D0000000048B900E40B5402000000488B034883C30048FFC975F4C3         ");

@@ -6,20 +6,21 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Arrays;
-
-import javax.management.RuntimeErrorException;
+import java.util.HashMap;
+import java.util.Map;
 
 import compiler.Lexer.Block;
 import compiler.Lexer.CurlyBracketParse;
 import compiler.MicroAssembler.Arg;
 import compiler.MicroAssembler.Instruction;
+import compiler.MicroAssembler.Label;
 import compiler.MicroAssembler.Register;
 import compiler.NaiveParser.CoreFunctionCall;
 import compiler.NaiveParser.CoreOp;
+import compiler.NaivePolisher.AccessStruct;
 import compiler.NaivePolisher.AccessValue;
 import compiler.NaivePolisher.Function;
 import compiler.NaivePolisher.FunctionType;
-import compiler.NaivePolisher.LiteralStringValue;
 import compiler.NaivePolisher.LiteralValue;
 import compiler.NaivePolisher.LocalVariable;
 import compiler.NaivePolisher.Scope;
@@ -49,7 +50,8 @@ public class NaiveAssembler {
 		naiveAssembler.compile(s, polisher);
 	}
 	
-	
+
+	Map<Function, Label> fTl = new HashMap<>();
 	
 	void compile(Scope s, NaivePolisher polisher) {
 		ArrayList<Instruction[]> instrs = new ArrayList<>();
@@ -57,19 +59,45 @@ public class NaiveAssembler {
 		
 //		instrs.add(assembler.prolog());
 //		instrs.add(assembler.sub(assembler.RSP, s.allocateSize/8));
+//		ArrayList<Integer> fnInstrOffset = new ArrayList<>();
+		Map<Integer, Function> fnInstrOffset = new HashMap<>();
+		
 		for(Function fn : polisher.allFunctionDefinitions) {
+			fnInstrOffset.put(instrs.size(), fn);
+			System.out.println(instrs.size());
 			compileBody(instrs, assembler, fn);
+			
 		}
 		for(Block b : s.blocks) {
 			compileExpr(instrs, assembler, b, s);
 		}
 		
 		System.out.println();
-		for(Instruction[] is : instrs)
+		
+		Map<Label, Integer> fTo = new HashMap<>();
+		int byteCount = 0;
+		int instrIndex = 0;
+		for(Instruction[] is : instrs) {
+			if(fnInstrOffset.containsKey(instrIndex)) {
+				fTo.put(assembler.new Label(fnInstrOffset.get(instrIndex).body), byteCount);
+			}
 			for(Instruction i : is) {
 				System.out.println(">\t" + i);
 				i.compile();
+				byteCount += i.bytes.length;
 			}
+			instrIndex ++;
+		}
+		System.out.println(fTo);
+		byteCount = 0;
+		for(Instruction[] is : instrs) {
+			for(Instruction i : is) {
+				byteCount += i.bytes.length;
+				i.updateLabel(fTo, byteCount);
+			}
+			instrIndex ++;
+		}
+		
 		for(Instruction[] group : instrs) {
 			for(Instruction i : group) {
 				for(byte b : i.bytes)
@@ -136,11 +164,24 @@ public class NaiveAssembler {
 			}
 			
 		} else if(b instanceof CoreFunctionCall fc) {
-			if(fc.function instanceof AccessValue av) {
+			if(fc.function instanceof AccessValue av && fc.argument instanceof AccessStruct aav) {
+				int paramCount = ((FunctionType)av.value.type).parameters.variables.size();
 				
+				for(Block e : aav.expressions)
+					compileExpr(instrs, assembler, e, s);
+				
+				Arg[] params = new Arg[] {
+						assembler.RCX,
+						assembler.RDX,
+						assembler.R8,
+						assembler.R9,
+					};
+				for(int i = 0 ; i < paramCount; i++)
+					instrs.add(new Instruction[] {assembler.new Pop((Register)params[i])});
 //				System.out.println(s.getFunction(av.value.s));
 //				System.out.println(fc.function);
 //				System.out.println(fc.argument);
+				instrs.add(new Instruction[] {assembler.new Call(assembler.new Label(s.getFunction(av.value.s).body))});
 			}
 			else throw new RuntimeException("Unimplemented: " + b.getClass());
 //			s.getFunction(fc.function.);
@@ -157,7 +198,8 @@ public class NaiveAssembler {
 			instrs.add(new Instruction[] {assembler.new Pop(assembler.RAX)});
 			break;
 		case "print":
-			instrs.add(new Instruction[] {assembler.new Pop(assembler.RAX)});
+			instrs.add(new Instruction[] {assembler.new Pop(assembler.RCX)});
+			
 			break;
 		default:
 			throw new RuntimeException("Invalid operation: " + op);
