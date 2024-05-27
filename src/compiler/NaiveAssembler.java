@@ -11,10 +11,13 @@ import java.util.Map;
 
 import compiler.Lexer.Block;
 import compiler.Lexer.CurlyBracketParse;
+import compiler.MicroAssembler.Address;
 import compiler.MicroAssembler.Arg;
 import compiler.MicroAssembler.Instruction;
+import compiler.MicroAssembler.InstructionBlock;
 import compiler.MicroAssembler.Label;
 import compiler.MicroAssembler.Register;
+import compiler.NaiveInterpreter.Stack;
 import compiler.NaiveParser.CoreFunctionCall;
 import compiler.NaiveParser.CoreOp;
 import compiler.NaivePolisher.AccessStruct;
@@ -44,6 +47,7 @@ public class NaiveAssembler {
 		Scope s = polisher.polish(b, NaivePolisher.builtInScope);
 		System.out.println("Polished:\n" + s.toParseString() + "\n===========================================\n");
 		
+		
 		System.out.println("Assembled:\n");
 
 		NaiveAssembler naiveAssembler = new NaiveAssembler();
@@ -51,71 +55,53 @@ public class NaiveAssembler {
 	}
 	
 
-	Map<Function, Label> fTl = new HashMap<>();
-	
+	Map<Block, InstructionBlock> blockToInstrBlock = new HashMap<>();
 	void compile(Scope s, NaivePolisher polisher) {
 		ArrayList<Instruction[]> instrs = new ArrayList<>();
 		MicroAssembler assembler = new MicroAssembler();
+		InstructionBlock root = assembler.new InstructionBlock(null, "__main__");
 		
-//		instrs.add(assembler.prolog());
-//		instrs.add(assembler.sub(assembler.RSP, s.allocateSize/8));
-//		ArrayList<Integer> fnInstrOffset = new ArrayList<>();
-		Map<Integer, Function> fnInstrOffset = new HashMap<>();
+		
 		
 		for(Function fn : polisher.allFunctionDefinitions) {
-			fnInstrOffset.put(instrs.size(), fn);
-			System.out.println(instrs.size());
-			compileBody(instrs, assembler, fn);
+			InstructionBlock blk = root.addBlock(fn.s);
+			blockToInstrBlock.put(fn.body, blk);
+			compileBody(blk, fn);
 			
 		}
-		for(Block b : s.blocks) {
-			compileExpr(instrs, assembler, b, s);
-		}
+//		for(Block b : s.blocks) {
+//			compileExpr(instrs, assembler, b, s);
+//		}
 		
 		System.out.println();
+		root.assemble();
+		System.out.println();
+		root.updateLabel(blockToInstrBlock);
 		
-		Map<Label, Integer> fTo = new HashMap<>();
-		int byteCount = 0;
-		int instrIndex = 0;
-		for(Instruction[] is : instrs) {
-			if(fnInstrOffset.containsKey(instrIndex)) {
-				fTo.put(assembler.new Label(fnInstrOffset.get(instrIndex).body), byteCount);
-			}
-			for(Instruction i : is) {
-				System.out.println(">\t" + i);
-				i.compile();
-				byteCount += i.bytes.length;
-			}
-			instrIndex ++;
-		}
-		System.out.println(fTo);
-		byteCount = 0;
-		for(Instruction[] is : instrs) {
-			for(Instruction i : is) {
-				byteCount += i.bytes.length;
-				i.updateLabel(fTo, byteCount);
-			}
-			instrIndex ++;
-		}
 		
-		for(Instruction[] group : instrs) {
-			for(Instruction i : group) {
-				for(byte b : i.bytes)
-					System.out.print(Integer.toHexString((b&255)|0x100).substring(1) + " ");
-			}
-			System.out.println();
-		}
-		
-		ByteArrayOutputStream bos = new ByteArrayOutputStream();
-		for(Instruction[] is : instrs)
-			for(Instruction i : is) {
-				try {
-					bos.write(i.bytes);
-				} catch (IOException e) {
-					e.printStackTrace();
-				}
-			}
-		byte[] bytes = bos.toByteArray();
+//		for(Instruction[] group : instrs) {
+//			for(Instruction i : group) {
+//				for(byte b : i.bytes)
+//					System.out.print(Integer.toHexString((b&255)|0x100).substring(1) + " ");
+//			}
+//			System.out.println();
+//		}
+//		
+//		ByteArrayOutputStream bos = new ByteArrayOutputStream();
+//		for(Instruction[] is : instrs)
+//			for(Instruction i : is) {
+//				try {
+//					bos.write(i.bytes);
+//				} catch (IOException e) {
+//					e.printStackTrace();
+//				}
+//			}
+//		byte[] bytes = bos.toByteArray();
+		byte[] bytes = root.bytes;
+		for(byte b : bytes)
+			System.out.print(Integer.toHexString((b&255)|0x100).substring(1));
+		System.out.println();
+		print(root);
 		
 		
 		assembler.assemble(bytes);
@@ -127,40 +113,55 @@ public class NaiveAssembler {
 //		}
 	}
 	
-	void compileBody(ArrayList<Instruction[]> instrs, MicroAssembler assembler, Function fn) {
-		Scope fnBody = (Scope)fn.body;
-		
-		instrs.add(assembler.prolog());
-		instrs.add(assembler.sub(assembler.RSP, fnBody.allocateSize/8));
-		
-		Arg[] params = new Arg[] {
-			assembler.RCX,
-			assembler.RDX,
-			assembler.R8,
-			assembler.R9,
-		};
-		for(int i = 0 ; i < ((FunctionType)fn.type).parameters.variables.size(); i++)
-			instrs.add(assembler.mov(assembler.new Address(assembler.RBP, null, 0, -i*8-8, 64), (Register)params[i]));
-		
-		for(Block b : fnBody.blocks) {
-			compileExpr(instrs, assembler, b, fnBody);
+	void print(InstructionBlock ib) {
+		for(Instruction i : ib.instructions) {
+			if(i instanceof InstructionBlock ibb) {
+//				System.out.println(ibb.name+":{");
+				print(ibb);
+//				System.out.println("}");
+			} else {
+				System.out.println("%04x".formatted(i.getAddress()) + "\t" + i);
+			}
 		}
-		instrs.add(assembler.epilog());
-		instrs.add(assembler.ret());
 	}
 	
-	void compileExpr(ArrayList<Instruction[]> instrs, MicroAssembler assembler, Block b, Scope s) {
-		System.out.println(b.getClass());
+	void compileBody(InstructionBlock ib, Function fn) {
+		Scope fnBody = (Scope)fn.body;
+		
+		ib.prolog();
+		ib.allocStack(fnBody.allocateSize/8);
+//		instrs.add(assembler.sub(assembler.RSP, fnBody.allocateSize/8));
+		ib.argumentsToVariables(((FunctionType)fn.type).parameters.variables.size());
+		
+//		for(int i = 0 ; i < ((FunctionType)fn.type).parameters.variables.size(); i++)
+//			instrs.add(assembler.mov(assembler.new Address(assembler.RBP, null, 0, -i*8-8, 64), (Register)params[i]));
+		
+		for(Block b : fnBody.blocks) {
+			System.out.println(b.getClass());
+			compileExpr(ib, b, fnBody);
+		}
+		ib.epilog();
+		ib.ret();
+	}
+	
+	void compileExpr(InstructionBlock ib, Block b, Scope s) {
+//		System.out.println(b.getClass());
 		if(b instanceof CoreOp op && op.operands.size() == 2) {
-			compileBinOp(instrs, assembler, op.s, op.operands.get(0), op.operands.get(1), s);
+			compileExpr(ib,  op.operands.get(0), s);
+			compileExpr(ib,  op.operands.get(1), s);
+			ib.binOpStack(op.s);
+			System.out.println("Binop: " + op.s);
 		} else if(b instanceof CoreOp op && op.operands.size() == 1) {
-			compileUnOp(instrs, assembler, op.s, op.operands.get(0), s);
+			compileExpr(ib,  op.operands.get(0), s);
+			ib.binOpStack(op.s);
 		} else if (b instanceof AccessValue av) {
 			if(av.value instanceof LocalVariable lv) {
-				instrs.add(new Instruction[] {assembler.new Push(assembler.new Address(assembler.RBP, null, 0, -lv.stackOffset/8-8, 64))});
+				ib.pushStackVariable(-lv.stackOffset/8-8);
+//				instrs.add(new Instruction[] {assembler.new Push(assembler.new Address(assembler.RBP, null, 0, -lv.stackOffset/8-8, 64))});
 				
 			} else if(av.value instanceof LiteralValue lv) {
-				instrs.add(new Instruction[] {assembler.new Push(assembler.new Immediate(lv.value.longValue()))});
+				ib.pushLiteral(lv.value.longValue());
+//				instrs.add(new Instruction[] {assembler.new Push(assembler.new Immediate(lv.value.longValue()))});
 			}
 			
 		} else if(b instanceof CoreFunctionCall fc) {
@@ -168,20 +169,10 @@ public class NaiveAssembler {
 				int paramCount = ((FunctionType)av.value.type).parameters.variables.size();
 				
 				for(Block e : aav.expressions)
-					compileExpr(instrs, assembler, e, s);
+					compileExpr(ib, e, s);
 				
-				Arg[] params = new Arg[] {
-						assembler.RCX,
-						assembler.RDX,
-						assembler.R8,
-						assembler.R9,
-					};
-				for(int i = 0 ; i < paramCount; i++)
-					instrs.add(new Instruction[] {assembler.new Pop((Register)params[i])});
-//				System.out.println(s.getFunction(av.value.s));
-//				System.out.println(fc.function);
-//				System.out.println(fc.argument);
-				instrs.add(new Instruction[] {assembler.new Call(assembler.new Label(s.getFunction(av.value.s).body))});
+				ib.popArguments(paramCount);
+				ib.callFunction(s.getFunction(av.value.s));
 			}
 			else throw new RuntimeException("Unimplemented: " + b.getClass());
 //			s.getFunction(fc.function.);
@@ -189,45 +180,45 @@ public class NaiveAssembler {
 		} else throw new RuntimeException("Invalid operation: " + b.getClass());
 		
 	}
-	void compileUnOp(ArrayList<Instruction[]> instrs, MicroAssembler assembler, String op, Block a, Scope s) {
-		compileExpr(instrs, assembler, a, s);
-		
-		
-		switch(op) {
-		case "return":
-			instrs.add(new Instruction[] {assembler.new Pop(assembler.RAX)});
-			break;
-		case "print":
-			instrs.add(new Instruction[] {assembler.new Pop(assembler.RCX)});
-			
-			break;
-		default:
-			throw new RuntimeException("Invalid operation: " + op);
-		}
-	}
-	
-	
-	void compileBinOp(ArrayList<Instruction[]> instrs, MicroAssembler assembler, String op, Block a, Block b, Scope s) {
-		compileExpr(instrs, assembler, a, s);
-		compileExpr(instrs, assembler, b, s);
-		
-		instrs.add(assembler.binOpStack(op));
-//		System.out.println(assembler.binOpStack(op));
-		
-//		ArrayList<Instruction> is = new ArrayList<>();
-//		is.add(assembler.new Pop(assembler.RAX));
-//		switch(op) {
-//		case "+":
-//			is.addAll(Arrays.asList(assembler.binOp(0, assembler.new Address(assembler.RSP, null, 0, 0, 64), assembler.RAX)));
-//			break;
-//		case "-":
-//			is.addAll(Arrays.asList(assembler.binOp(1, assembler.new Address(assembler.RSP, null, 0, 0, 64), assembler.RAX)));
-//			break;
-//		case "-":
-//			is.addAll(Arrays.asList(assembler.binOp(1, assembler.new Address(assembler.RSP, null, 0, 0, 64), assembler.RAX)));
-//			break;
-//		}
+//	void compileUnOp(ArrayList<Instruction[]> instrs, MicroAssembler assembler, String op, Block a, Scope s) {
+//		compileExpr(instrs, assembler, a, s);
 //		
-//		instrs.add(is.toArray(Instruction[]::new));
-	}
+//		
+//		switch(op) {
+//		case "return":
+//			instrs.add(new Instruction[] {assembler.new Pop(assembler.RAX)});
+//			break;
+//		case "print":
+//			instrs.add(new Instruction[] {assembler.new Pop(assembler.RCX)});
+//			
+//			break;
+//		default:
+//			throw new RuntimeException("Invalid operation: " + op);
+//		}
+//	}
+	
+	
+//	void compileBinOp(ArrayList<Instruction[]> instrs, MicroAssembler assembler, String op, Block a, Block b, Scope s) {
+//		compileExpr(instrs, assembler, a, s);
+//		compileExpr(instrs, assembler, b, s);
+//		
+//		instrs.add(assembler.binOpStack(op));
+////		System.out.println(assembler.binOpStack(op));
+//		
+////		ArrayList<Instruction> is = new ArrayList<>();
+////		is.add(assembler.new Pop(assembler.RAX));
+////		switch(op) {
+////		case "+":
+////			is.addAll(Arrays.asList(assembler.binOp(0, assembler.new Address(assembler.RSP, null, 0, 0, 64), assembler.RAX)));
+////			break;
+////		case "-":
+////			is.addAll(Arrays.asList(assembler.binOp(1, assembler.new Address(assembler.RSP, null, 0, 0, 64), assembler.RAX)));
+////			break;
+////		case "-":
+////			is.addAll(Arrays.asList(assembler.binOp(1, assembler.new Address(assembler.RSP, null, 0, 0, 64), assembler.RAX)));
+////			break;
+////		}
+////		
+////		instrs.add(is.toArray(Instruction[]::new));
+//	}
 }

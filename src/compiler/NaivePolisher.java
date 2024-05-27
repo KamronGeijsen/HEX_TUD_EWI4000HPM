@@ -51,9 +51,14 @@ public class NaivePolisher {
 		
 		System.out.println("Parsed:\n" + b.toParseString()+"\n===========================================\n");
 		
-		
+		b = (CurlyBracketParse) polisher.unorderedDefinitions(b, NaivePolisher.builtInScope);
 		Scope s = polisher.polish(b, NaivePolisher.builtInScope);
+		for(Value[] vs : s.values.values())
+			for(Value v : vs)
+				if(v instanceof Function f)
+					f.body = polisher.polish(f.body, NaivePolisher.builtInScope);
 		System.out.println("Polished:\n" + s.toParseString()+"\n");
+		
 		
 //		System.out.println(s.toParseString());
 		for(Function f : polisher.allFunctionDefinitions) {
@@ -72,7 +77,7 @@ public class NaivePolisher {
 		
 		s.parent = b.parent;
 		
-		b = (CurlyBracketParse) unorderedDefinitions(b, s);
+		
 		
 		ArrayList<Block> l = b.expressions;
 		for(int i = 0; i < b.expressions.size(); i++) {
@@ -114,7 +119,6 @@ public class NaivePolisher {
 			ArrayList<LocalVariable> paramsType = new ArrayList<>(), returnsType = new ArrayList<>();
 			if(p.funType instanceof CoreOp fnt && fnt.s.contentEquals("->")) {
 				Block params = subst(fnt.operands.get(0), s);
-				
 				Block returns = subst(fnt.operands.get(1), s);
 				if(params instanceof InitializeVariable) {
 					Variable var = ((InitializeVariable) params).variable;
@@ -154,10 +158,11 @@ public class NaivePolisher {
 			}
 			System.out.println("Params:" + paramsType);
 			System.out.println("Return:" + returnsType);
+			p.body = unorderedDefinitions((CurlyBracketParse)p.body, body);
 			Function f = new Function(new FunctionType(p.name, new StructureType(paramsType), new StructureType(returnsType)), body, p.name);
 			allFunctionDefinitions.add(f);
 			s.addValue(p.name, f);
-			body = polish((CurlyBracketParse)p.body, s, body);
+//			body = polish((CurlyBracketParse)p.body, s, body);
 			return new AccessValue(f);
 		} else if (b instanceof CoreClassDefinition) {
 			CoreClassDefinition deftype = (CoreClassDefinition) b;

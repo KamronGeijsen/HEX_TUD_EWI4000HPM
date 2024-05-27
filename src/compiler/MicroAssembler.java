@@ -1,7 +1,6 @@
 package compiler;
 
 import java.io.BufferedReader;
-import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -17,6 +16,7 @@ import java.util.Scanner;
 
 import compiler.Lexer.Block;
 import compiler.Lexer.CurlyBracketParse;
+import compiler.NaivePolisher.Function;
 
 public class MicroAssembler {
 	
@@ -49,6 +49,9 @@ public class MicroAssembler {
 		}
 		public Address(Register base, int offset, int size) {
 			this(base, null, 0, offset, size);
+		}
+		public Address(Register base, int size) {
+			this(base, null, 0, 0, size);
 		}
 		@Override
 		public String toString() {
@@ -100,9 +103,17 @@ public class MicroAssembler {
 	
 	abstract class Instruction {
 		byte[] bytes;
+		int relIP;
+		InstructionBlock parent;
 		
-		abstract void compile();
-		void updateLabel(Map<Label, Integer> labelOffset, int relIP) {};
+		abstract void assemble();
+		void updateLabel(Map<Block, InstructionBlock> labelOffset) {};
+		long getAddress() {
+			if(parent == null) {
+				return relIP;
+			}
+			return relIP + parent.getAddress();
+		}
 	}
 	
 //	class Goto extends Instruction {
@@ -110,24 +121,138 @@ public class MicroAssembler {
 //	}
 	class InstructionBlock extends Instruction {
 		
-		Instruction[] instructions;
-		public InstructionBlock(Instruction... instructions) {
-			this.instructions = instructions;
-		}
-		public InstructionBlock(ArrayList<Instruction> instructions) {
-			this.instructions = instructions.toArray(n -> new Instruction[n]);
+		ArrayList<Instruction> instructions;
+		String name;
+		
+		public InstructionBlock(InstructionBlock parent, String name, Instruction... instructions) {
+			this.name = name;
+			this.parent = parent;
+			this.instructions = new ArrayList<Instruction>(Arrays.asList(instructions));
 		}
 		
 		@Override
-		void compile() {
-			for(Instruction i : instructions)
-				i.compile();
+		void assemble() {
+
+			ByteBuffer bb = ByteBuffer.allocate(256);
+//			int byteOffset = 0;
+			for(Instruction i : instructions) {
+				i.parent = this;
+				i.assemble();
+//				System.out.println(i.getClass());
+				i.relIP = bb.position();
+				bb.put(i.bytes);
+				
+//				byteOffset += i.bytes.length;
+			}
+			bytes = Arrays.copyOf(bb.array(), bb.position());
 		}
 		
+		
 		@Override
-		void updateLabel(Map<Label, Integer> labelOffset, int relIP) {
-//			for()
+		void updateLabel(Map<Block, InstructionBlock> labelOffset) {
+			for(Instruction i : instructions) {
+				i.updateLabel(labelOffset);
+			}
 		}
+	
+	
+		InstructionBlock addBlock(String name, Instruction... instructions) {
+			InstructionBlock ib = new InstructionBlock(this, name, instructions);
+			this.instructions.add(ib);
+			return ib;
+		}
+		InstructionBlock prolog() {
+			return addBlock("prolog",
+					new Push(RBP),
+					new Mov(RBP, RSP)
+					);
+		}
+		InstructionBlock epilog() {
+			return addBlock("epilog",
+					new Mov(RSP, RBP),
+					new Pop(RBP)
+					);
+		}
+		InstructionBlock allocStack(int bytes) {
+			return addBlock("allocStack",
+					new BinOp(BinaryOperation.SUB.i, RSP, new Immediate(bytes))
+					);
+		}
+		InstructionBlock argumentsToVariables(int parameters) {
+			InstructionBlock  ib = addBlock("arguments");
+			Arg[] params = new Arg[] {
+					RCX,
+					RDX,
+					R8,
+					R9,
+				};
+			for(int i = 0; i < parameters; i++) {
+				ib.instructions.add(new Mov(new Address(RBP, -i*8-8), params[i]));
+			}
+			return ib;
+		}
+		InstructionBlock popArguments(int arguments) {
+			InstructionBlock ib = addBlock("popArguments");
+			Arg[] params = new Arg[] {
+					RCX,
+					RDX,
+					R8,
+					R9,
+				};
+			for(int i = 0; i < arguments; i++) {
+				ib.instructions.add(new Pop(params[i]));
+			}
+			return ib;
+		}
+		void pushStackVariable(int offset) {
+			instructions.add(new Push(new Address(RBP, -offset/8-8)));
+		}
+		void pushLiteral(long value) {
+			instructions.add(new Push(new Immediate(value)));
+		}
+		void callFunction(Function function) {
+			instructions.add(new Call(new Label(function.body)));
+		}
+		InstructionBlock binOpStack(String op) {
+			InstructionBlock ib;
+			Map<String, Integer> op1 = Map.of("+", 0, "|", 1, "&", 4, "-", 5, "^", 6);
+			if(op1.containsKey(op))
+				ib= addBlock("binOp."+op,
+						new Pop(RAX),
+						new BinOp(op1.get(op), new Address(RSP, null, 0, 0, 64), RAX)
+					);
+			else if(op.equals("%"))
+				ib= addBlock("binOp."+op,
+						new Pop(RAX),
+						new DirectBytes(new byte[] {0x48, (byte)0x99}, "cqo"), // cqo  (sign extends RAX into RAX:RDX)
+						new DirectBytes(new byte[] {0x48, (byte)0xf7, 0x34, 0x24}, "div\t[rsp]"), // div [rsp]  (RAX,RDX = RAX:RDX / [RSP], RAX:RDX % [RSP])
+						new Mov(new Address(RSP, 64), RDX)
+					);
+			else if(op.equals("/"))
+				ib= addBlock("binOp."+op,
+						new Pop(RAX),
+						new DirectBytes(new byte[] {0x48, (byte)0x99}, "cqo"), // cqo  (sign extends RAX into RAX:RDX)
+						new DirectBytes(new byte[] {0x48, (byte)0xf7, 0x34, 0x24}, "div\t[rsp]"), // div [rsp]  (RAX,RDX = RAX:RDX / [RSP], RAX:RDX % [RSP])
+						new Mov(new Address(RSP, null, 0, 0, 64), RAX)
+					);
+			else throw new RuntimeException("Not implemented binop: " + op);
+//			instructions.add(ib);
+			return ib;
+		}
+		void ret() {
+			instructions.add(new Ret());
+			
+		}
+	}
+	class AddressLabel extends Instruction {
+
+
+		int relIP;
+		@Override
+		void assemble() {
+			bytes = new byte[0];
+		}
+		
 	}
 	class DirectBytes extends Instruction {
 
@@ -141,7 +266,7 @@ public class MicroAssembler {
 			this.toPrint = null;
 		}
 		@Override
-		void compile() {}
+		void assemble() {}
 		
 		@Override
 		public String toString() {
@@ -157,7 +282,7 @@ public class MicroAssembler {
 		}
 	}
 	class Mod extends Instruction {
-		void compile() {
+		void assemble() {
 			bytes = new byte[] { 0x48, (byte)0x99, 0x48, (byte)0xF7, (byte)0xFE, 0x48, (byte)0x89, (byte)0xD0 };
 		}
 	}
@@ -169,7 +294,7 @@ public class MicroAssembler {
 			this.dst = dst;
 		}
 		@Override
-		void compile() {
+		void assemble() {
 			int opSize = dst.size;
 			ByteBuffer bb = ByteBuffer.allocate(256);
 			bb.order(ByteOrder.LITTLE_ENDIAN);
@@ -210,7 +335,7 @@ public class MicroAssembler {
 			this.dst = dst;
 		}
 		@Override
-		void compile() {
+		void assemble() {
 			int opSize = dst.size;
 			ByteBuffer bb = ByteBuffer.allocate(256);
 			bb.order(ByteOrder.LITTLE_ENDIAN);
@@ -270,7 +395,7 @@ public class MicroAssembler {
 			this.src = src;
 		}
 		@Override
-		void compile() {
+		void assemble() {
 //			System.out.println(src);
 			if(src instanceof Immediate i) {
 
@@ -311,7 +436,7 @@ public class MicroAssembler {
 			this.dst = dst;
 		}
 		@Override
-		void compile() {
+		void assemble() {
 			if(dst instanceof Register r) {
 				bytes = new byte[] {(byte) (0x58 + r.reg)};
 			} else {
@@ -336,7 +461,7 @@ public class MicroAssembler {
 			this.fn = fn;
 		}
 		@Override
-		void compile() {
+		void assemble() {
 			if(fn instanceof Register r) {
 				bytes = new byte[] {(byte) (0x50 + r.reg)};
 			} else if(fn instanceof Label l) {
@@ -344,10 +469,12 @@ public class MicroAssembler {
 			}
 		}
 		
-		void updateLabel(Map<Label, Integer> labelOffset, int currIP) {
+		
+		@Override
+		void updateLabel(Map<Block, InstructionBlock> labelOffset) {
+			
 			if(fn instanceof Label l) {
-				int value = labelOffset.get(l)-currIP;
-				System.out.println(labelOffset.get(l)+"\t"+currIP+"\t"+value);
+				int value = (int) (labelOffset.get(l).getAddress()-getAddress());
 				bytes[1] = (byte)((value>>0)&0xff);
 				bytes[2] = (byte)((value>>8)&0xff);
 				bytes[3] = (byte)((value>>16)&0xff);
@@ -360,7 +487,7 @@ public class MicroAssembler {
 		public Ret() {
 		}
 		@Override
-		void compile() {
+		void assemble() {
 			bytes = new byte[] {(byte) 0xC3};
 		}
 		@Override
@@ -401,7 +528,7 @@ public class MicroAssembler {
 		
 	}
 	
-	Register RAX = new Register(0, 64);
+	public Register RAX = new Register(0, 64);
 	Register RCX = new Register(1, 64);
 	Register RDX = new Register(2, 64);
 	Register RBX = new Register(3, 64);
@@ -419,18 +546,9 @@ public class MicroAssembler {
 	Register R15 = new Register(15, 64);
 
 	
-	Instruction prolog() {
-		return new InstructionBlock(
-				new Push(RBP),
-				new Mov(RBP, RSP)
-				);
-	}
-	Instruction epilog() {
-		return new InstructionBlock(
-				new Mov(RSP, RBP),
-				new Pop(RBP)
-				);
-	}
+	
+	
+	
 	
 //	Instruction[] prolog() {
 //		return new Instruction[] {
