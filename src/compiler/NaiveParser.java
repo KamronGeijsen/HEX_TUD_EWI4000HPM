@@ -18,7 +18,6 @@ import compiler.Lexer.ParenthesisParse;
 import compiler.Lexer.SquareBracketParse;
 import compiler.Lexer.StringParse;
 import compiler.Lexer.Symbol;
-import compiler.NaivePolisher.Scope;
 
 public class NaiveParser {
 	
@@ -261,7 +260,7 @@ public class NaiveParser {
 					CurlyBracketParse body = new CurlyBracketParse();
 					CurlyBracketParse elseBody = new CurlyBracketParse();
 					while(i < len){
-						System.out.println(i + "\tif\t" + l);
+//						System.out.println(i + "\tif\t" + l);
 						if(l.get(i) instanceof CurlyBracketParse) {
 							body = (CurlyBracketParse) l.remove(i);
 							break;
@@ -665,7 +664,9 @@ public class NaiveParser {
 		@Override
 		public String toParseString() {
 			final boolean verbose = false;
-			boolean p = !(parent instanceof CurlyBracketParse || parent instanceof CoreKeywordExpression || parent instanceof Scope);
+			boolean p = !(parent instanceof CurlyBracketParse || parent instanceof CoreKeywordExpression
+//					|| parent instanceof Scope
+					);
 			if(operands.size() == 0)
 				return s;
 			if(operands.size() == 1)
@@ -777,8 +778,9 @@ public class NaiveParser {
 
 		@Override
 		public String toParseString() {
-			if(elseBody instanceof CurlyBracketParse && ((CurlyBracketParse) elseBody).expressions.size() == 0 || 
-				elseBody instanceof Scope && ((Scope) elseBody).blocks.size() == 0)
+			if(elseBody instanceof CurlyBracketParse && ((CurlyBracketParse) elseBody).expressions.size() == 0 
+//				|| elseBody instanceof Scope && ((Scope) elseBody).blocks.size() == 0
+				)
 				return "if (" + argument.toParseString() + "): " + body.toParseString();
 			return "if (" + argument.toParseString() + "): " + body.toParseString() + " else: " + elseBody.toParseString();
 		}

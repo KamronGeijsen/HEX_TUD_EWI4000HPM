@@ -11,6 +11,20 @@
 //  cannot be casted to mutable ((const int*) a = null; int* b = a !) 
 //}
 
+struct Point {
+   long x
+   long y
+}
+
 fn mod long n, long mod -> long:
 	return n % mod
+fn main () {
+	//print(modFast(15, 4))
+}
 
+
+	
+fn modFast long n, long mod -> long:
+	return n & (mod-1)
+	
+print(mod(10))
