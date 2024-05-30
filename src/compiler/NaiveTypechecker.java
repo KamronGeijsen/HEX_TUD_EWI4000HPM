@@ -235,10 +235,12 @@ public class NaiveTypechecker {
 			if (fc.function instanceof Symbol s && parent.isType(s.s) && fc.argument instanceof AliasParse a) {
 				parent.localValues.types.add(new UnconstructedType(s.s));
 				parent.localValues.vars.add(a.s);
-				System.out.println("added " + a.s);
+//				System.out.println("added " + a.s);
 				return a;
-			} else if (fc.function instanceof Symbol s)
-				return new FunctionObjectGenerator(new FunctionIdentifier(s.s, null));
+			} else if (fc.function instanceof Symbol s) {
+				fc.function = new FunctionObjectGenerator(new FunctionIdentifier(s.s, null));
+				return fc;
+			}
 			else
 				throw new RuntimeException("Not implemented: " + b.getClass());
 		} else if(b instanceof Symbol s) {
@@ -325,7 +327,8 @@ public class NaiveTypechecker {
 				resolveTypes(o.operands.get(i), context);
 			}
 		} else if(b instanceof CoreFunctionCall fc) {
-			throw new RuntimeException("Not implemented: " + b.getClass());
+			resolveTypes(fc.function, context);
+			resolveTypes(fc.argument, context);
 		} else if(b instanceof Symbol s) {
 //			throw new RuntimeException("Not implemented: " + b.getClass());
 		} else if(b instanceof TypeObjectGenerator tg){
@@ -359,7 +362,8 @@ public class NaiveTypechecker {
 		@Override
 		public String toString() {
 			// TODO Auto-generated method stub
-			return null;
+//			return null;
+			return this.getClass().getName() + "@" + Integer.toHexString(this.hashCode());
 		}
 		@Override
 		public String toParseString() {
@@ -517,8 +521,9 @@ public class NaiveTypechecker {
 
 		@Override
 		public String toString() {
+			return this.getClass().getName() + "@" + Integer.toHexString(this.hashCode());
 			// TODO Auto-generated method stub
-			return null;
+//			return null;
 		}
 
 		@Override

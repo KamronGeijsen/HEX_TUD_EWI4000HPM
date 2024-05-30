@@ -16,7 +16,7 @@ import java.util.Scanner;
 
 import compiler.Lexer.Block;
 import compiler.Lexer.CurlyBracketParse;
-import compiler.NaivePolisher.Function;
+import compiler.NaiveTypechecker.Function;
 
 public class MicroAssembler {
 	
@@ -187,7 +187,7 @@ public class MicroAssembler {
 					R9,
 				};
 			for(int i = 0; i < parameters; i++) {
-				ib.instructions.add(new Mov(new Address(RBP, -i*8-8), params[i]));
+				ib.instructions.add(new Mov(new Address(RBP, -i*8-8, 64), params[i]));
 			}
 			return ib;
 		}
@@ -204,13 +204,15 @@ public class MicroAssembler {
 			}
 			return ib;
 		}
-		void pushStackVariable(int offset) {
-			instructions.add(new Push(new Address(RBP, -offset/8-8)));
+		void pushStackVariable(int bitOffset) {
+			instructions.add(new Push(new Address(RBP, -bitOffset/8-8, 64)));
 		}
 		void pushLiteral(long value) {
 			instructions.add(new Push(new Immediate(value)));
 		}
 		void callFunction(Function function) {
+			System.out.println("Label define:  " + function);
+			System.out.println(function.body);
 			instructions.add(new Call(new Label(function.body)));
 		}
 		InstructionBlock binOpStack(String op) {
@@ -239,10 +241,21 @@ public class MicroAssembler {
 //			instructions.add(ib);
 			return ib;
 		}
+		InstructionBlock unOpStack(String op) {
+			InstructionBlock ib;
+			if(op.equals("return"))
+				ib= addBlock("unOp."+op,
+						new Pop(RAX)
+					);
+			else throw new RuntimeException("Not implemented binop: " + op);
+//			instructions.add(ib);
+			return ib;
+		}
 		void ret() {
 			instructions.add(new Ret());
 			
 		}
+
 	}
 	class AddressLabel extends Instruction {
 
@@ -474,7 +487,8 @@ public class MicroAssembler {
 		void updateLabel(Map<Block, InstructionBlock> labelOffset) {
 			
 			if(fn instanceof Label l) {
-				int value = (int) (labelOffset.get(l).getAddress()-getAddress());
+				System.out.println("label thing here: " + l.b);
+				int value = (int) (labelOffset.get(l.b).getAddress()-getAddress());
 				bytes[1] = (byte)((value>>0)&0xff);
 				bytes[2] = (byte)((value>>8)&0xff);
 				bytes[3] = (byte)((value>>16)&0xff);
@@ -817,18 +831,18 @@ public class MicroAssembler {
 		}
 	}
 	static File inputFile = new File("src/code12.hex");
-	public static void main(String[] args) throws IOException {
-		String fileContent = new String(Files.readAllBytes(inputFile.toPath())) + " ";
-		Lexer lexer = new Lexer();
-		NaiveParser parser = new NaiveParser();
-		
-		System.out.println("Input:\n" + fileContent + "\n===========================================\n");
-		CurlyBracketParse b = lexer.parse(fileContent);
-		System.out.println("Lexed:\n" + b.toParseString()+"\n===========================================\n");
-		b = (CurlyBracketParse) parser.parse(b);
-		
-		System.out.println("Parsed:\n" + b.toParseString()+"\n===========================================\n");
-		
-		new MicroAssembler();
-	}
+//	public static void main(String[] args) throws IOException {
+//		String fileContent = new String(Files.readAllBytes(inputFile.toPath())) + " ";
+//		Lexer lexer = new Lexer();
+//		NaiveParser parser = new NaiveParser();
+//		
+//		System.out.println("Input:\n" + fileContent + "\n===========================================\n");
+//		CurlyBracketParse b = lexer.parse(fileContent);
+//		System.out.println("Lexed:\n" + b.toParseString()+"\n===========================================\n");
+//		b = (CurlyBracketParse) parser.parse(b);
+//		
+//		System.out.println("Parsed:\n" + b.toParseString()+"\n===========================================\n");
+//		
+//		new MicroAssembler();
+//	}
 }

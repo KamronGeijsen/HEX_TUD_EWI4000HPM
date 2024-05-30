@@ -1,6 +1,5 @@
 package compiler;
 
-import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -8,25 +7,22 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Map.Entry;
 
+import compiler.Lexer.AliasParse;
 import compiler.Lexer.Block;
 import compiler.Lexer.CurlyBracketParse;
-import compiler.MicroAssembler.Address;
-import compiler.MicroAssembler.Arg;
+import compiler.Lexer.NumberParse;
 import compiler.MicroAssembler.Instruction;
 import compiler.MicroAssembler.InstructionBlock;
-import compiler.MicroAssembler.Label;
-import compiler.MicroAssembler.Register;
-import compiler.NaiveInterpreter.Stack;
 import compiler.NaiveParser.CoreFunctionCall;
 import compiler.NaiveParser.CoreOp;
-import compiler.NaivePolisher.AccessStruct;
-import compiler.NaivePolisher.AccessValue;
-import compiler.NaivePolisher.Function;
-import compiler.NaivePolisher.FunctionType;
-import compiler.NaivePolisher.LiteralValue;
-import compiler.NaivePolisher.LocalVariable;
-import compiler.NaivePolisher.Scope;
+import compiler.NaiveTypechecker.Body;
+import compiler.NaiveTypechecker.Context;
+import compiler.NaiveTypechecker.Function;
+import compiler.NaiveTypechecker.FunctionObjectGenerator;
+import compiler.NaiveTypechecker.StructType;
+import compiler.NaiveTypechecker.Type;
 
 public class NaiveAssembler {
 	static File inputFile = new File("src/code12.hex");
@@ -35,7 +31,7 @@ public class NaiveAssembler {
 		Arrays.stream(new int[0]).allMatch(n -> true);
 		Lexer lexer = new Lexer();
 		NaiveParser parser = new NaiveParser();
-		NaivePolisher polisher = new NaivePolisher();
+		NaiveTypechecker polisher = new NaiveTypechecker();
 		
 		System.out.println("Input:\n" + fileContent + "\n===========================================\n");
 		CurlyBracketParse b = lexer.parse(fileContent);
@@ -43,32 +39,44 @@ public class NaiveAssembler {
 		b = (CurlyBracketParse) parser.parse(b);
 
 		System.out.println("Parsed:\n" + b.toParseString() + "\n===========================================\n");
-
-		Scope s = polisher.polish(b, NaivePolisher.builtInScope);
-		System.out.println("Polished:\n" + s.toParseString() + "\n===========================================\n");
 		
+		Body moduleBody = (Body)polisher.polish(b, polisher.builtins);
+		polisher.resolveTypes(moduleBody, moduleBody.context);
+		System.out.println("Polished:\n" + moduleBody.toParseString() + "\n===========================================\n");
+		
+		System.out.println(moduleBody.context.functionDefinitions.get(1).body.context.localValues);
 		
 		System.out.println("Assembled:\n");
 
 		NaiveAssembler naiveAssembler = new NaiveAssembler();
-		naiveAssembler.compile(s, polisher);
+		naiveAssembler.compile(moduleBody);
 	}
 	
 
 	Map<Block, InstructionBlock> blockToInstrBlock = new HashMap<>();
-	void compile(Scope s, NaivePolisher polisher) {
+	void compile(Body s) {
 		ArrayList<Instruction[]> instrs = new ArrayList<>();
 		MicroAssembler assembler = new MicroAssembler();
 		InstructionBlock root = assembler.new InstructionBlock(null, "__main__");
 		
 		
 		
-		for(Function fn : polisher.allFunctionDefinitions) {
-			InstructionBlock blk = root.addBlock(fn.s);
+		for(Function fn : s.context.functionDefinitions) {
+			System.out.println("This defin: " + fn);
+			System.out.println(fn.body);
+			InstructionBlock blk = root.addBlock(fn.functionIdentifier.name);
 			blockToInstrBlock.put(fn.body, blk);
+			System.out.println("Working on: " + fn.body.context.localValues);
 			compileBody(blk, fn);
 			
 		}
+		System.out.println("\nHashtable");
+		for(Entry<Block, InstructionBlock> e : blockToInstrBlock.entrySet()) {
+			System.out.println(e.getKey());
+			System.out.println(e.getValue());
+			System.out.println();
+		}
+		
 //		for(Block b : s.blocks) {
 //			compileExpr(instrs, assembler, b, s);
 //		}
@@ -125,57 +133,125 @@ public class NaiveAssembler {
 		}
 	}
 	
+	class Variable {
+		Type type;
+	}
+	class LocalVariable extends Variable {
+		int offset;
+		
+		public LocalVariable(Type type, int offset) {
+			this.type = type;
+			this.offset = offset;
+		}
+		
+		@Override
+		public String toString() {
+			return "@[rbp+"+offset + "] " + type;
+		}
+	}
+	
+	void addStructToVariables(Map<String, Variable> variables, StructType struct) {
+		int totalOffset = 0;
+		for(Variable v : variables.values())
+			totalOffset += v.type.size;
+		
+		for(int i = 0; i < struct.vars.size(); i++) {
+			Variable old = variables.put(struct.vars.get(i), new LocalVariable(struct.types.get(i), totalOffset));
+			if (old != null) throw new RuntimeException("Name shadowing! " + struct.types.get(i) + " " +struct.vars.get(i) + " replaces " + old);
+			totalOffset+=struct.types.get(i).size;
+		}
+	}
+	void removeStructFromVariables(Map<String, Variable> variables, StructType struct) {
+		for(int i = 0; i < struct.vars.size(); i++) {
+			Variable old = variables.remove(struct.vars.get(i));
+			if (old == null) throw new RuntimeException("FATAL ERROR! SHOULD EXIST " + struct.types.get(i) + " " +struct.vars.get(i));
+		}
+	}
+	
 	void compileBody(InstructionBlock ib, Function fn) {
-		Scope fnBody = (Scope)fn.body;
+		Body fnBody = fn.body;
+		System.out.println("Here the body is: " + fnBody);
+		
 		
 		ib.prolog();
-		ib.allocStack(fnBody.allocateSize/8);
-//		instrs.add(assembler.sub(assembler.RSP, fnBody.allocateSize/8));
-		ib.argumentsToVariables(((FunctionType)fn.type).parameters.variables.size());
+		ib.allocStack(fnBody.context.localValues.size/8);
 		
+//		instrs.add(assembler.sub(assembler.RSP, fnBody.allocateSize/8));
+		ib.argumentsToVariables(fn.functionIdentifier.type.args.types.size());
+		
+//		System.out.println(fnBody.context.localValues);
 //		for(int i = 0 ; i < ((FunctionType)fn.type).parameters.variables.size(); i++)
 //			instrs.add(assembler.mov(assembler.new Address(assembler.RBP, null, 0, -i*8-8, 64), (Register)params[i]));
-		
-		for(Block b : fnBody.blocks) {
-			System.out.println(b.getClass());
-			compileExpr(ib, b, fnBody);
+		HashMap<String, Variable> variables = new HashMap<>();
+		addStructToVariables(variables, fnBody.context.localValues);
+//		System.out.println(variables);
+		for(Block b : fnBody.expr) {
+//			System.out.println(b.getClass());
+			compileExpr(ib, b, fnBody.context, variables);
 		}
 		ib.epilog();
 		ib.ret();
 	}
 	
-	void compileExpr(InstructionBlock ib, Block b, Scope s) {
-//		System.out.println(b.getClass());
+	void compileExpr(InstructionBlock ib, Block b, Context context, Map<String, Variable> variables) {
+		System.out.println(b.getClass());
 		if(b instanceof CoreOp op && op.operands.size() == 2) {
-			compileExpr(ib,  op.operands.get(0), s);
-			compileExpr(ib,  op.operands.get(1), s);
+			compileExpr(ib,  op.operands.get(0), context, variables);
+			compileExpr(ib,  op.operands.get(1), context, variables);
 			ib.binOpStack(op.s);
-			System.out.println("Binop: " + op.s);
+//			System.out.println("Binop: " + op.s);
 		} else if(b instanceof CoreOp op && op.operands.size() == 1) {
-			compileExpr(ib,  op.operands.get(0), s);
-			ib.binOpStack(op.s);
-		} else if (b instanceof AccessValue av) {
-			if(av.value instanceof LocalVariable lv) {
-				ib.pushStackVariable(-lv.stackOffset/8-8);
-//				instrs.add(new Instruction[] {assembler.new Push(assembler.new Address(assembler.RBP, null, 0, -lv.stackOffset/8-8, 64))});
-				
-			} else if(av.value instanceof LiteralValue lv) {
-				ib.pushLiteral(lv.value.longValue());
-//				instrs.add(new Instruction[] {assembler.new Push(assembler.new Immediate(lv.value.longValue()))});
-			}
-			
+			compileExpr(ib,  op.operands.get(0), context, variables);
+			ib.unOpStack(op.s);
+//		} else if (b instanceof AccessValue av) {
+//			if(av.value instanceof LocalVariable lv) {
+//				ib.pushStackVariable(-lv.stackOffset/8-8);
+////				instrs.add(new Instruction[] {assembler.new Push(assembler.new Address(assembler.RBP, null, 0, -lv.stackOffset/8-8, 64))});
+//				
+//			} else if(av.value instanceof LiteralValue lv) {
+//				ib.pushLiteral(lv.value.longValue());
+////				instrs.add(new Instruction[] {assembler.new Push(assembler.new Immediate(lv.value.longValue()))});
+//			}
+		} else if(b instanceof AliasParse s) {
+//			return 
+//			throw new RuntimeException("Unimplemented: " + b.getClass());
+//			System.out.println(s.s);
+//			System.out.println("Get S " + s.s);
+//			System.out.println("Got S " + variables.get(s.s));
+			ib.pushStackVariable(((LocalVariable)variables.get(s.s)).offset);
+		} else if(b instanceof NumberParse n) {
+			ib.pushLiteral(Long.parseLong(n.s));
 		} else if(b instanceof CoreFunctionCall fc) {
-			if(fc.function instanceof AccessValue av && fc.argument instanceof AccessStruct aav) {
-				int paramCount = ((FunctionType)av.value.type).parameters.variables.size();
-				
-				for(Block e : aav.expressions)
-					compileExpr(ib, e, s);
-				
-				ib.popArguments(paramCount);
-				ib.callFunction(s.getFunction(av.value.s));
-			}
-			else throw new RuntimeException("Unimplemented: " + b.getClass());
+//			if(fc.function instanceof AccessValue av && fc.argument instanceof AccessStruct aav) {
+//				int paramCount = ((FunctionType)av.value.type).parameters.variables.size();
+//				
+//				for(Block e : aav.expressions)
+//					compileExpr(ib, e, s);
+//				
+//				ib.popArguments(paramCount);
+//				ib.callFunction(s.getFunction(av.value.s));
+//			}
+//			else throw new RuntimeException("Unimplemented: " + b.getClass());
 //			s.getFunction(fc.function.);
+//			throw new RuntimeException("Unimplemented: " + b.getClass());
+			if(fc.function instanceof FunctionObjectGenerator fg) {
+//				fg.functionIdentifier.name
+				System.out.println("HUUUH");
+				System.out.println("Found: " + context.getFunction(fg.functionIdentifier.name));
+				ib.callFunction(context.getFunction(fg.functionIdentifier.name));
+			} else throw new RuntimeException("Invalid operation: " + fc.function.getClass());
+		} else if(b instanceof FunctionObjectGenerator s) {
+//			throw new RuntimeException("Unimplemented: " + b.getClass());
+			
+		} else if(b instanceof Body body) {
+//			throw new RuntimeException("Unimplemented: " + b.getClass());
+			addStructToVariables(variables, body.context.localValues);
+//			System.out.println(variables);
+			for(Block block : body.expr) {
+//				System.out.println(b.getClass());
+				compileExpr(ib, block, body.context, variables);
+			}
+			removeStructFromVariables(variables, body.context.localValues);
 			
 		} else throw new RuntimeException("Invalid operation: " + b.getClass());
 		
