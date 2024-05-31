@@ -62,19 +62,21 @@ public class NaiveAssembler {
 		
 		
 		for(Function fn : s.context.functionDefinitions) {
-			System.out.println("This defin: " + fn);
-			System.out.println(fn.body);
+//			System.out.println("This defin: " + fn);
+//			System.out.println(fn.body);
 			InstructionBlock blk = root.addBlock(fn.functionIdentifier.name);
+			
+			System.out.println("Put in body: " + fn.body);
 			blockToInstrBlock.put(fn.body, blk);
-			System.out.println("Working on: " + fn.body.context.localValues);
+//			System.out.println("Working on: " + fn.body.context.localValues);
 			compileBody(blk, fn);
 			
 		}
 		System.out.println("\nHashtable");
 		for(Entry<Block, InstructionBlock> e : blockToInstrBlock.entrySet()) {
 			System.out.println(e.getKey());
-			System.out.println(e.getValue());
-			System.out.println();
+//			System.out.println(e.getValue());
+//			System.out.println();
 		}
 		
 //		for(Block b : s.blocks) {
@@ -170,7 +172,7 @@ public class NaiveAssembler {
 	
 	void compileBody(InstructionBlock ib, Function fn) {
 		Body fnBody = fn.body;
-		System.out.println("Here the body is: " + fnBody);
+//		System.out.println("Here the body is: " + fnBody);
 		
 		
 		ib.prolog();
@@ -194,7 +196,7 @@ public class NaiveAssembler {
 	}
 	
 	void compileExpr(InstructionBlock ib, Block b, Context context, Map<String, Variable> variables) {
-		System.out.println(b.getClass());
+//		System.out.println(b.getClass());
 		if(b instanceof CoreOp op && op.operands.size() == 2) {
 			compileExpr(ib,  op.operands.get(0), context, variables);
 			compileExpr(ib,  op.operands.get(1), context, variables);
@@ -236,9 +238,26 @@ public class NaiveAssembler {
 //			throw new RuntimeException("Unimplemented: " + b.getClass());
 			if(fc.function instanceof FunctionObjectGenerator fg) {
 //				fg.functionIdentifier.name
-				System.out.println("HUUUH");
-				System.out.println("Found: " + context.getFunction(fg.functionIdentifier.name));
+//				System.out.println("HUUUH");
+//				System.out.println("Found: " + context.getFunction(fg.functionIdentifier.name));
+//				System.out.println(fc.argument.getClass());
+//				ib.popArguments;
+				if(fc.argument instanceof CoreOp op) {
+					for(Block o : op.operands)
+						compileExpr(ib, o, context, variables);
+					ib.popArguments(op.operands.size());
+				} else {
+					compileExpr(ib, fc.argument, context, variables);
+					ib.popArguments(1);
+				}
+				
+				Function fn = context.getFunction(fg.functionIdentifier.name);
+				System.out.println("Found this function: " + fn.body);
 				ib.callFunction(context.getFunction(fg.functionIdentifier.name));
+				
+				if(fg.functionIdentifier.type.rets.types.size() > 0) {
+					ib.pushRet();
+				}
 			} else throw new RuntimeException("Invalid operation: " + fc.function.getClass());
 		} else if(b instanceof FunctionObjectGenerator s) {
 //			throw new RuntimeException("Unimplemented: " + b.getClass());

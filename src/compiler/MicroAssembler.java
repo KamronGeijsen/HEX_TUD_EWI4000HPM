@@ -134,7 +134,7 @@ public class MicroAssembler {
 		void assemble() {
 
 			ByteBuffer bb = ByteBuffer.allocate(256);
-//			int byteOffset = 0;
+			int byteOffset = 0;
 			for(Instruction i : instructions) {
 				i.parent = this;
 				i.assemble();
@@ -142,6 +142,7 @@ public class MicroAssembler {
 				i.relIP = bb.position();
 				bb.put(i.bytes);
 				
+//				i.relIP = byteOffset;
 //				byteOffset += i.bytes.length;
 			}
 			bytes = Arrays.copyOf(bb.array(), bb.position());
@@ -150,9 +151,12 @@ public class MicroAssembler {
 		
 		@Override
 		void updateLabel(Map<Block, InstructionBlock> labelOffset) {
+			ByteBuffer bb = ByteBuffer.allocate(256);
 			for(Instruction i : instructions) {
 				i.updateLabel(labelOffset);
+				bb.put(i.bytes);
 			}
+			bytes = Arrays.copyOf(bb.array(), bb.position());
 		}
 	
 	
@@ -199,7 +203,7 @@ public class MicroAssembler {
 					R8,
 					R9,
 				};
-			for(int i = 0; i < arguments; i++) {
+			for(int i = arguments-1; i >= 0; i--) {
 				ib.instructions.add(new Pop(params[i]));
 			}
 			return ib;
@@ -210,9 +214,12 @@ public class MicroAssembler {
 		void pushLiteral(long value) {
 			instructions.add(new Push(new Immediate(value)));
 		}
+		void pushRet() {
+			instructions.add(new Push(RAX));
+		}
 		void callFunction(Function function) {
-			System.out.println("Label define:  " + function);
-			System.out.println(function.body);
+			System.out.println("Label define:  " + function.body);
+//			System.out.println(function.body);
 			instructions.add(new Call(new Label(function.body)));
 		}
 		InstructionBlock binOpStack(String op) {
@@ -257,6 +264,9 @@ public class MicroAssembler {
 		}
 
 	}
+	
+	
+	
 	class AddressLabel extends Instruction {
 
 
@@ -488,13 +498,20 @@ public class MicroAssembler {
 			
 			if(fn instanceof Label l) {
 				System.out.println("label thing here: " + l.b);
-				int value = (int) (labelOffset.get(l.b).getAddress()-getAddress());
+				int value = (int) (labelOffset.get(l.b).getAddress()-getAddress()-bytes.length);
 				bytes[1] = (byte)((value>>0)&0xff);
 				bytes[2] = (byte)((value>>8)&0xff);
 				bytes[3] = (byte)((value>>16)&0xff);
 				bytes[4] = (byte)((value>>24)&0xff);
 			}
 			
+		}
+		
+		@Override
+		public String toString() {
+			if(fn instanceof Label l)
+				return "call\t%04x".formatted(getAddress() + bytes.length + (bytes[1] | bytes[2]<<8 | bytes[3]<<16 | bytes[4]<<24));
+			return super.toString();
 		}
 	}
 	class Ret extends Instruction {

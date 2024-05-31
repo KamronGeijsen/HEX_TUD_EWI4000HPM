@@ -230,6 +230,32 @@ public class NaiveParser {
 						def.parent = e;
 					}
 					break;
+				case "property":
+					if(i < len-1 && l.get(i+1) instanceof AliasParse) {
+						l.remove(i);
+						String name = ((AliasParse)l.remove(i)).s;
+						
+						ParenthesisParse arguments = new ParenthesisParse();
+						CurlyBracketParse body = new CurlyBracketParse();
+						while(i < len){
+							Block b = l.remove(i);
+							if(b instanceof CurlyBracketParse) {
+								body = (CurlyBracketParse) b;
+								break;
+							}
+							arguments.expressions.add(b);
+							b.parent = arguments;
+						}
+						i = l.size();
+						
+						CorePropertyDefinition def = new CorePropertyDefinition(name, arguments, body);
+						l.add(i, def);
+
+						arguments.parent = def;
+						body.parent = def;
+						def.parent = e;
+					}
+					break;
 				case "lambda": {
 					l.remove(i);
 					
@@ -728,6 +754,35 @@ public class NaiveParser {
 		@Override
 		Block[] iterate() {
 			return new Block[] {funType, body};
+		}
+		
+	}
+	static class CorePropertyDefinition extends CoreKeywordExpression {
+		String name;
+		Block inheritType;
+		Block body;
+		
+		public CorePropertyDefinition(String name, ParenthesisParse argument, CurlyBracketParse body) {
+			this.name = name;
+			this.inheritType = argument;
+			this.body = body;
+		}
+		
+		@Override
+		public String toString() {
+			return "property @" + name + "" + inheritType + "" + body;
+		}
+
+		@Override
+		public String toParseString() {
+			// TODO Auto-generated method stub
+			return "property @" + name + "(" + inheritType.toParseString() + "): "
+					+ "" + body.toParseString();
+		}
+		
+		@Override
+		Block[] iterate() {
+			return new Block[] {inheritType, body};
 		}
 		
 	}

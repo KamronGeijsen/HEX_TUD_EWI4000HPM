@@ -5,13 +5,9 @@ import java.io.IOException;
 import java.math.BigInteger;
 import java.nio.file.Files;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
-
-import javax.management.AttributeList;
 
 import compiler.Lexer.AliasParse;
 import compiler.Lexer.Block;
@@ -23,6 +19,7 @@ import compiler.NaiveParser.CoreFunctionCall;
 import compiler.NaiveParser.CoreFunctionDefinition;
 import compiler.NaiveParser.CoreIfStatement;
 import compiler.NaiveParser.CoreOp;
+import compiler.NaiveParser.CorePropertyDefinition;
 import compiler.NaiveParser.CoreStructureDefinition;
 import compiler.NaiveParser.CoreWhileStatement;
 
@@ -217,9 +214,6 @@ public class NaiveTypechecker {
 			argumentsBody.expr.add(body);
 //			parent.functions.put(fd.name, fid);
 			parent.functionDefinitions.add(new Function(fid, argumentsBody));
-			System.out.println();
-			System.out.println("2Defined args context " + argumentsBody.context.localValues);
-			System.out.println("3Defined args context " + body.context.localValues);
 			
 			return new FunctionObjectGenerator(fid);
 		} else if(b instanceof CoreOp o) {
@@ -262,6 +256,11 @@ public class NaiveTypechecker {
 		} else if(b instanceof CoreWhileStatement iws) {
 			iws.argument = polish(iws.argument, parent);
 			iws.body = polish(iws.body, parent);
+			return b;
+			
+		} else if(b instanceof CorePropertyDefinition iws) {
+//			iws.argument = polish(iws.argument, parent);
+//			iws.body = polish(iws.body, parent);
 			return b;
 		} else {
 			throw new RuntimeException("Not implemented: " + b.getClass());
@@ -322,10 +321,22 @@ public class NaiveTypechecker {
 			}
 //			System.out.println(fg.functionIdentifier.type.getClass());
 		} else if(b instanceof CoreOp o) {
-//			System.out.println(o.s);
-			for(int i = 0; i < o.operands.size(); i++) {
-				resolveTypes(o.operands.get(i), context);
+			if(o.s.equals(",")) {
+				
+				List<Block> c = parseComma(b);
+				o.operands.clear();
+				o.operands.addAll(c);
+				
+				for(int i = 0; i < o.operands.size(); i++) {
+					resolveTypes(o.operands.get(i), context);
+				}
+			} else {
+				for(int i = 0; i < o.operands.size(); i++) {
+					resolveTypes(o.operands.get(i), context);
+				}
 			}
+//			System.out.println(o.s);
+			
 		} else if(b instanceof CoreFunctionCall fc) {
 			resolveTypes(fc.function, context);
 			resolveTypes(fc.argument, context);
