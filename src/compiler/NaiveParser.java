@@ -83,6 +83,10 @@ public class NaiveParser {
 			p.funType = orderOfOperation(p.funType);
 			p.body = orderOfOperation(p.body);
 		}
+		else if(b instanceof CoreRefinementDefinition p) {
+			p.inheritType = orderOfOperation(p.inheritType);
+			p.body = orderOfOperation(p.body);
+		}
 		else if(b instanceof CoreIfStatement) {
 			CoreIfStatement p = (CoreIfStatement) b;
 			p.argument = orderOfOperation(p.argument);
@@ -230,7 +234,7 @@ public class NaiveParser {
 						def.parent = e;
 					}
 					break;
-				case "property":
+				case "refinement":
 					if(i < len-1 && l.get(i+1) instanceof AliasParse) {
 						l.remove(i);
 						String name = ((AliasParse)l.remove(i)).s;
@@ -248,7 +252,7 @@ public class NaiveParser {
 						}
 						i = l.size();
 						
-						CorePropertyDefinition def = new CorePropertyDefinition(name, arguments, body);
+						CoreRefinementDefinition def = new CoreRefinementDefinition(name, arguments, body);
 						l.add(i, def);
 
 						arguments.parent = def;
@@ -757,12 +761,12 @@ public class NaiveParser {
 		}
 		
 	}
-	static class CorePropertyDefinition extends CoreKeywordExpression {
+	static class CoreRefinementDefinition extends CoreKeywordExpression {
 		String name;
 		Block inheritType;
 		Block body;
 		
-		public CorePropertyDefinition(String name, ParenthesisParse argument, CurlyBracketParse body) {
+		public CoreRefinementDefinition(String name, ParenthesisParse argument, CurlyBracketParse body) {
 			this.name = name;
 			this.inheritType = argument;
 			this.body = body;
@@ -770,14 +774,12 @@ public class NaiveParser {
 		
 		@Override
 		public String toString() {
-			return "property @" + name + "" + inheritType + "" + body;
+			return "refinement @" + name + "" + inheritType + "" + body;
 		}
 
 		@Override
 		public String toParseString() {
-			// TODO Auto-generated method stub
-			return "property @" + name + "(" + inheritType.toParseString() + "): "
-					+ "" + body.toParseString();
+			return "refinement @" + name + "(" + inheritType.toParseString() + "): " + body.toParseString();
 		}
 		
 		@Override

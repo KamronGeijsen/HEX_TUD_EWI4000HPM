@@ -13,6 +13,7 @@ import compiler.Lexer.AliasParse;
 import compiler.Lexer.Block;
 import compiler.Lexer.CurlyBracketParse;
 import compiler.Lexer.NumberParse;
+import compiler.Lexer.Symbol;
 import compiler.MicroAssembler.Instruction;
 import compiler.MicroAssembler.InstructionBlock;
 import compiler.NaiveParser.CoreFunctionCall;
@@ -66,7 +67,7 @@ public class NaiveAssembler {
 //			System.out.println(fn.body);
 			InstructionBlock blk = root.addBlock(fn.functionIdentifier.name);
 			
-			System.out.println("Put in body: " + fn.body);
+//			System.out.println("Put in body: " + fn.body);
 			blockToInstrBlock.put(fn.body, blk);
 //			System.out.println("Working on: " + fn.body.context.localValues);
 			compileBody(blk, fn);
@@ -176,6 +177,7 @@ public class NaiveAssembler {
 		
 		
 		ib.prolog();
+		System.out.println(">>>>>: " + fnBody.context.localValues);
 		ib.allocStack(fnBody.context.localValues.size/8);
 		
 //		instrs.add(assembler.sub(assembler.RSP, fnBody.allocateSize/8));
@@ -197,9 +199,17 @@ public class NaiveAssembler {
 	
 	void compileExpr(InstructionBlock ib, Block b, Context context, Map<String, Variable> variables) {
 //		System.out.println(b.getClass());
-		if(b instanceof CoreOp op && op.operands.size() == 2) {
-			compileExpr(ib,  op.operands.get(0), context, variables);
-			compileExpr(ib,  op.operands.get(1), context, variables);
+		if(b instanceof CoreOp op && op.operands.size() == 2 && op.s.equals("=")) {
+			
+			if(op.operands.get(0) instanceof AliasParse s && !context.isType(s.s)) {
+
+				compileExpr(ib, op.operands.get(1), context, variables);
+				ib.setStackVariable(((LocalVariable)variables.get(s.s)).offset);
+			}
+		}
+		else if(b instanceof CoreOp op && op.operands.size() == 2) {
+			compileExpr(ib, op.operands.get(0), context, variables);
+			compileExpr(ib, op.operands.get(1), context, variables);
 			ib.binOpStack(op.s);
 //			System.out.println("Binop: " + op.s);
 		} else if(b instanceof CoreOp op && op.operands.size() == 1) {
@@ -252,7 +262,7 @@ public class NaiveAssembler {
 				}
 				
 				Function fn = context.getFunction(fg.functionIdentifier.name);
-				System.out.println("Found this function: " + fn.body);
+//				System.out.println("Found this function: " + fn.body);
 				ib.callFunction(context.getFunction(fg.functionIdentifier.name));
 				
 				if(fg.functionIdentifier.type.rets.types.size() > 0) {
@@ -265,12 +275,14 @@ public class NaiveAssembler {
 		} else if(b instanceof Body body) {
 //			throw new RuntimeException("Unimplemented: " + b.getClass());
 			addStructToVariables(variables, body.context.localValues);
+			ib.allocStack(body.context.localValues.size);
 //			System.out.println(variables);
 			for(Block block : body.expr) {
 //				System.out.println(b.getClass());
 				compileExpr(ib, block, body.context, variables);
 			}
 			removeStructFromVariables(variables, body.context.localValues);
+			ib.deallocStack(body.context.localValues.size);
 			
 		} else throw new RuntimeException("Invalid operation: " + b.getClass());
 		

@@ -605,7 +605,7 @@ public class Lexer {
 			"struct",
 			"acls", //Anonymous class
 			"astc", //Anonymous struct
-			"property",
+			"refinement",
 			
 			
 			"and",

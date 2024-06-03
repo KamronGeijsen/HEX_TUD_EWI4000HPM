@@ -177,9 +177,14 @@ public class MicroAssembler {
 					new Pop(RBP)
 					);
 		}
-		InstructionBlock allocStack(int bytes) {
+		InstructionBlock allocStack(int bits) {
 			return addBlock("allocStack",
-					new BinOp(BinaryOperation.SUB.i, RSP, new Immediate(bytes))
+					new BinOp(BinaryOperation.SUB.i, RSP, new Immediate(bits/8))
+					);
+		}
+		InstructionBlock deallocStack(int bits) {
+			return addBlock("deallocStack",
+					new BinOp(BinaryOperation.ADD.i, RSP, new Immediate(bits/8))
 					);
 		}
 		InstructionBlock argumentsToVariables(int parameters) {
@@ -262,7 +267,9 @@ public class MicroAssembler {
 			instructions.add(new Ret());
 			
 		}
-
+		void setStackVariable(int bitOffset) {
+			instructions.add(new Pop(new Address(RBP, -bitOffset/8-8, 64)));
+		}
 	}
 	
 	

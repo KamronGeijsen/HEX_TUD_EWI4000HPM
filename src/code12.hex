@@ -1,4 +1,4 @@
-// property powerOfTwo int x: x in (1,2,4,8,16,32,64,128,256,512,1024,2048,4096,8192,16384, 32768, 65536)
+refinement powerOfTwo int x: x & (x-1) == 0
 
 
 //int a = 5 * inc a + 2
@@ -17,18 +17,19 @@ struct Point {
 }
 
 fn main () {
-	//print()
-	modFast(15, 4)
-	return 0
+	powerOfTwo a = 16
+	return 37 % a
 }
 
+fn inline {
+	powerOfTwo a = 16
+	return 37 % a
+}
 
 fn mod long n, long mod -> long:
 	return n % mod
 
 
-	
 fn modFast long n, long mod -> long:
 	return n & (mod-1)
-	
-print(mod(10))
+
