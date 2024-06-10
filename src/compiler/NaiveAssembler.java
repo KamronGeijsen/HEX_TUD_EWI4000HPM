@@ -45,7 +45,7 @@ public class NaiveAssembler {
 		polisher.resolveTypes(moduleBody, moduleBody.context);
 		System.out.println("Polished:\n" + moduleBody.toParseString() + "\n===========================================\n");
 		
-		System.out.println(moduleBody.context.functionDefinitions.get(1).body.context.localValues);
+//		System.out.println(moduleBody.context.functionDefinitions.get(1).body.context.localValues);
 		
 		System.out.println("Assembled:\n");
 
@@ -62,7 +62,7 @@ public class NaiveAssembler {
 		
 		
 		
-		for(Function fn : s.context.functionDefinitions) {
+		for(Function fn : s.context.allDefinedFunctions) {
 //			System.out.println("This defin: " + fn);
 //			System.out.println(fn.body);
 			InstructionBlock blk = root.addBlock(fn.functionIdentifier.name);
@@ -178,7 +178,7 @@ public class NaiveAssembler {
 		
 		ib.prolog();
 		System.out.println(">>>>>: " + fnBody.context.localValues);
-		ib.allocStack(fnBody.context.localValues.size/8);
+		ib.allocStack(fnBody.context.localValues.size);
 		
 //		instrs.add(assembler.sub(assembler.RSP, fnBody.allocateSize/8));
 		ib.argumentsToVariables(fn.functionIdentifier.type.args.types.size());
@@ -228,8 +228,9 @@ public class NaiveAssembler {
 //			return 
 //			throw new RuntimeException("Unimplemented: " + b.getClass());
 //			System.out.println(s.s);
-//			System.out.println("Get S " + s.s);
-//			System.out.println("Got S " + variables.get(s.s));
+			System.out.println("Get S " + s.s);
+			System.out.println("Got S " + variables.get(s.s));
+//			System.out.println();
 			ib.pushStackVariable(((LocalVariable)variables.get(s.s)).offset);
 		} else if(b instanceof NumberParse n) {
 			ib.pushLiteral(Long.parseLong(n.s));
@@ -261,9 +262,9 @@ public class NaiveAssembler {
 					ib.popArguments(1);
 				}
 				
-				Function fn = context.getFunction(fg.functionIdentifier.name);
+				Function fn = context.getFunction(fg.functionIdentifier);
 //				System.out.println("Found this function: " + fn.body);
-				ib.callFunction(context.getFunction(fg.functionIdentifier.name));
+				ib.callFunction(context.getFunction(fg.functionIdentifier));
 				
 				if(fg.functionIdentifier.type.rets.types.size() > 0) {
 					ib.pushRet();

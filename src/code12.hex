@@ -1,4 +1,4 @@
-refinement powerOfTwo int x: x & (x-1) == 0
+refinement powerOfTwo long x: x & (x-1) == 0
 
 
 //int a = 5 * inc a + 2
@@ -11,10 +11,10 @@ refinement powerOfTwo int x: x & (x-1) == 0
 //  cannot be casted to mutable ((const int*) a = null; int* b = a !) 
 //}
 
-struct Point {
-   long x
-   long y
-}
+//struct Point {
+//   long x
+//   long y
+//}
 
 fn main () {
 	powerOfTwo a = 16
@@ -26,10 +26,10 @@ fn inline {
 	return 37 % a
 }
 
-fn mod long n, long mod -> long:
-	return n % mod
+//fn mod long n, long mod -> long:
+//	return n % mod
 
 
-fn modFast long n, long mod -> long:
-	return n & (mod-1)
+//fn modFast long n, long mod -> long:
+//	return n & (mod-1)
 

@@ -64,7 +64,8 @@ public class MicroAssembler {
 				else args.add(index+"*"+scale);
 			if(offset != 0 || args.size() == 0)
 				args.add(offset+"");
-			return "["+String.join("+", args)+"]";
+			
+			return "["+String.join("+", args).replace("+-", "+")+"]";
 		}
 	}
 //	class Variable extends Arg {
@@ -237,16 +238,17 @@ public class MicroAssembler {
 					);
 			else if(op.equals("%"))
 				ib= addBlock("binOp."+op,
+						new Pop(RCX),
 						new Pop(RAX),
 						new DirectBytes(new byte[] {0x48, (byte)0x99}, "cqo"), // cqo  (sign extends RAX into RAX:RDX)
-						new DirectBytes(new byte[] {0x48, (byte)0xf7, 0x34, 0x24}, "div\t[rsp]"), // div [rsp]  (RAX,RDX = RAX:RDX / [RSP], RAX:RDX % [RSP])
-						new Mov(new Address(RSP, 64), RDX)
+						new DirectBytes(new byte[] {0x48,  (byte)0xF7,  (byte)0xF1}, "div\t%rcx"), // div [rsp]  (RAX,RDX = RAX:RDX / [RSP], RAX:RDX % [RSP])
+						new Push(RDX)
 					);
 			else if(op.equals("/"))
 				ib= addBlock("binOp."+op,
 						new Pop(RAX),
 						new DirectBytes(new byte[] {0x48, (byte)0x99}, "cqo"), // cqo  (sign extends RAX into RAX:RDX)
-						new DirectBytes(new byte[] {0x48, (byte)0xf7, 0x34, 0x24}, "div\t[rsp]"), // div [rsp]  (RAX,RDX = RAX:RDX / [RSP], RAX:RDX % [RSP])
+						new DirectBytes(new byte[] {0x48, (byte)0xf7, 0x34, 0x24}, "div\t[%rsp]"), // div [rsp]  (RAX,RDX = RAX:RDX / [RSP], RAX:RDX % [RSP])
 						new Mov(new Address(RSP, null, 0, 0, 64), RAX)
 					);
 			else throw new RuntimeException("Not implemented binop: " + op);

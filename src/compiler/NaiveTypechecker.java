@@ -5,8 +5,9 @@ import java.io.IOException;
 import java.math.BigInteger;
 import java.nio.file.Files;
 import java.util.ArrayList;
-import java.util.HashSet;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import compiler.Lexer.AliasParse;
@@ -23,9 +24,11 @@ import compiler.NaiveParser.CoreOp;
 import compiler.NaiveParser.CoreRefinementDefinition;
 import compiler.NaiveParser.CoreStructureDefinition;
 import compiler.NaiveParser.CoreWhileStatement;
+import compiler.NaiveTypechecker.Type;
 
 public class NaiveTypechecker {
-//	static File inputFile = new File("src/snake.hex");
+private Type type;
+	//	static File inputFile = new File("src/snake.hex");
 //	static File inputFile = new File("src/code6.hex");
 //	static File inputFile = new File("src/fibonacci.hex");
 //	static File inputFile = new File("src/primes.hex");
@@ -76,19 +79,19 @@ public class NaiveTypechecker {
 	
 	final Context builtins = new Context(null);
 	public NaiveTypechecker() {
-		builtins.types = Set.of(
-				"int",
-				"long",
-				"void"
+		builtins.types = Map.of(
+				"int", new Primitive("int", 32),
+				"long", new Primitive("long", 64),
+				"void", new Primitive("void", 0)
+				
 				);
 //		builtins.functions = Set.of(
 //				);
-		builtins.typeDefinitions = List.of(
-				new Primitive("int", 32),
-				new Primitive("long", 64),
-				new Primitive("auto", 0),
-				new Primitive("void", 0)
-				);
+//		builtins.typeDefinitions = List.of(
+//				
+//				
+//				
+//				);
 	}
 	
 	
@@ -131,24 +134,24 @@ public class NaiveTypechecker {
 				if(k.s.equals("void")){
 					continue;
 				} else {
-					types.add(new DeferredType(k.s));
+					types.add(args.context.getType(k.s));
 					vars.add("_");
 				}
 				
 				
 			} else if (commaSeparated.get(i) instanceof Symbol s && args.context.isType(s.s)) {
-				types.add(new DeferredType(s.s));
+				types.add(args.context.getType(s.s));
 				vars.add("_");
 			} else if (commaSeparated.get(i) instanceof Symbol s) {
-				types.add(new DeferredType("auto"));
+				types.add(args.context.getType("auto"));
 				vars.add(s.s);
 			} else if (commaSeparated.get(i) instanceof CoreFunctionCall c) {
 //				System.out.println(c.function.getClass());
 				if(c.function instanceof Keyword k && args.context.isType(k.s) && c.argument instanceof Symbol s) {
-					types.add(new DeferredType(k.s));
+					types.add(args.context.getType(k.s));
 					vars.add(s.s);
 				} else if (c.function instanceof Symbol s && args.context.isType(s.s) && c.argument instanceof Symbol ss) {
-					types.add(new DeferredType(s.s));
+					types.add(args.context.getType(s.s));
 					vars.add(ss.s);
 				}
 			} else throw new RuntimeException("Unexpected expression: " + commaSeparated.get(i));
@@ -192,11 +195,11 @@ public class NaiveTypechecker {
 			Body newBody = new Body(parent);
 			for(Block e : c.expressions) {
 				if(e instanceof CoreFunctionDefinition fd) {
-					newBody.context.functions.add(fd.name);
+					newBody.context.functions.put(fd.name, null);
 				} else if(e instanceof CoreStructureDefinition sd) {
-					newBody.context.types.add(sd.name);
-				} else if(e instanceof CoreRefinementDefinition pd) {
-					newBody.context.types.add(pd.name);
+					newBody.context.types.put(sd.name, new StructType(sd.name));
+				} else if(e instanceof CoreRefinementDefinition rd) {
+					newBody.context.types.put(rd.name, new StructType(rd.name));
 				}
 			}
 			for(Block e : c.expressions) {
@@ -210,18 +213,30 @@ public class NaiveTypechecker {
 			FunctionIdentifier fid = new FunctionIdentifier(fd.name, getFunctionType(fd.funType, argumentsBody));
 			Body body = (Body)polish(fd.body, argumentsBody.context);
 			argumentsBody.expr.add(body);
-			parent.functionDefinitions.add(new Function(fid, argumentsBody));
+			
+			parent.addFunction(fd.name, new Function(fid, body));
 			return new FunctionObjectGenerator(fid);
 
 		} else if(b instanceof CoreRefinementDefinition rd) {
 			Body argumentsBody = new Body(parent);
 			
+			argumentsBody.context.localValues = (StructType) parent.types.get(rd.name);
+			argumentsBody.context.localValues.name = rd.name;
+			
+			argumentsBody.context.localValues.types = new ArrayList<>();
+			argumentsBody.context.localValues.vars = new ArrayList<>();
+			
+//			getStructType(b, argumentsBody)
+			StructType st = getStructType(rd.inheritType, argumentsBody); 
+//			argumentsBody.context.localValues.types = st.types;
+//			argumentsBody.context.localValues.vars = st.vars;
 			
 			Body body = (Body)polish(rd.body, argumentsBody.context);
 			argumentsBody.expr.add(body);
-			Type t = new DeferredType(rd.name);
+			Type t = parent.getType(rd.name);
 			
-			parent.typeDefinitions.add(t);
+			;
+			
 			
 			return new TypeObjectGenerator(t);
 		} else if(b instanceof CoreOp o) {
@@ -233,7 +248,7 @@ public class NaiveTypechecker {
 			return o;
 		} else if(b instanceof CoreFunctionCall fc) {
 			if (fc.function instanceof Symbol s && parent.isType(s.s) && fc.argument instanceof AliasParse a) {
-				parent.localValues.types.add(new DeferredType(s.s));
+				parent.localValues.types.add(parent.getType(s.s));
 				parent.localValues.vars.add(a.s);
 //				System.out.println("added " + a.s);
 				return a;
@@ -242,19 +257,19 @@ public class NaiveTypechecker {
 				return fc;
 			}
 			else {
-				System.out.println(fc);
+//				System.out.println(fc);
 				throw new RuntimeException("Not implemented: " + b.getClass());
 			}
 		} else if(b instanceof Symbol s) {
 			return b;
 		} else if(b instanceof CoreStructureDefinition sd){
 			Body typeBody = new Body(parent);
+			typeBody.context.localValues = (StructType) parent.types.get(sd.name);
 			
 			Body body = (Body)polish(sd.body, typeBody.context);
-			parent.typeDefinitions.add(body.context.localValues);
 			body.context.localValues.name = sd.name;
 			
-			return new TypeObjectGenerator(new DeferredType(sd.name));
+			return new TypeObjectGenerator(parent.getType(sd.name));
 		} else if(b instanceof CoreIfStatement ifs) {
 			ifs.argument = polish(ifs.argument, parent);
 			ifs.body = polish(ifs.body, parent);
@@ -283,53 +298,101 @@ public class NaiveTypechecker {
 			}
 			return false;
 		} else if(t instanceof StructType st){
-			for(int i = 0; i < st.types.size(); i++) {
-				Type type;
-				if(finishedType(st.types.get(i), context)) {
-					if(st.types.get(i) instanceof DeferredType dt) {
-						st.types.set(i, context.getType(dt.name));
-					}
-				} else {
-					return false;
-				}
-			}
+//			System.out.println("Name: " + st.name);
+//			System.out.println(t);
+//			for(int i = 0; i < st.types.size(); i++) {
+//				Type type;
+//				if(finishedType(st.types.get(i), context)) {
+//					
+//				} else {
+//					return false;
+//				}
+//			}
 			int size = 0;
 			for(Type type : st.types)
-				type.size += size;
+				size += type.size;
 			st.size = size;
-			
-			return true;
-		} else if(t instanceof DeferredType ut){
-			Type type = context.getType(ut.name);
-			if(type instanceof DeferredType dt && dt.finished)
-				return true;
-			
-			return false;
-		} else if(t instanceof Primitive) {
 			return true;
 		} else throw new RuntimeException("Invalid type: " + t.getClass());
+		
+//		return false;
+//		if(t instanceof FunctionType ft) {
+//			if(finishedType(ft.args, context) && finishedType(ft.rets, context)) {
+//				t.size = ft.args.size + ft.rets.size;
+//				return true;
+//			}
+//			return false;
+//		} else if(t instanceof StructType st){
+//			for(int i = 0; i < st.types.size(); i++) {
+//				Type type;
+//				if(finishedType(st.types.get(i), context)) {
+//					if(st.types.get(i) instanceof DeferredType dt) {
+//						st.types.set(i, context.getType(dt.name));
+//					}
+//				} else {
+//					return false;
+//				}
+//			}
+//			int size = 0;
+//			for(Type type : st.types)
+//				type.size += size;
+//			st.size = size;
+//			
+//			return true;
+//		} else if(t instanceof DeferredType ut){
+//			Type type = context.getType(ut.name);
+//			if(type instanceof DeferredType dt && dt.finished)
+//				return true;
+//			
+//			return false;
+//		} else if(t instanceof Primitive) {
+//			return true;
+//		} else throw new RuntimeException("Invalid type: " + t.getClass());
 	}
 	void resolveTypes(Block b, Context context) {
 		if(b instanceof Body body) {
 			
-			ArrayList<Type> unfinishedTypes = new ArrayList<>();
-			for(int i = 0; i < body.context.typeDefinitions.size(); i++) {
-				if(finishedType(body.context.typeDefinitions.get(i), body.context)) {
-					if(body.context.typeDefinitions.get(i) instanceof DeferredType dt) {
-						body.context.typeDefinitions.set(i, context.getType(dt.name));
+			int totalFinished = 0;
+			int lastFinished;
+			do {
+				lastFinished = totalFinished;
+				totalFinished = 0;
+				for(Type t : body.context.types.values()) {
+					if(!t.isFinished) {
+						boolean finished = finishedType(t, context);
+						if(finished) {
+							t.isFinished = true;
+							totalFinished++;
+						}
+					} else {
+						totalFinished++;
 					}
-				} else {
-					unfinishedTypes.add(body.context.typeDefinitions.get(i));
+					
 				}
-//				body.context.typeDefinitions.set(i, );
-			}
+				if(totalFinished == lastFinished && totalFinished < body.context.types.values().size())
+					throw new RuntimeException("Infinite loop!");
+			} while(totalFinished < body.context.types.values().size());
 			
 			
-			for(Function f : body.context.functionDefinitions) {
-				if(!finishedType(f.functionIdentifier.type, f.body.context)) {
-					throw new RuntimeException("Type unfinished!");
+//			for(int i = 0; i < body.context.typeDefinitions.size(); i++) {
+//				if(finishedType(body.context.typeDefinitions.get(i), body.context)) {
+//					if(body.context.typeDefinitions.get(i) instanceof DeferredType dt) {
+//						body.context.typeDefinitions.set(i, context.getType(dt.name));
+//					}
+//				} else {
+//					unfinishedTypes.add(body.context.typeDefinitions.get(i));
+//				}
+////				body.context.typeDefinitions.set(i, );
+//			}
+			
+			
+			for(FunctionOverload fo : body.context.functions.values()) {
+				for(Function f : fo.functions) {
+					if(!finishedType(f.functionIdentifier.type, f.body.context)) {
+						throw new RuntimeException("Type unfinished!");
+					}
+					resolveTypes(f.body, f.body.context);					
 				}
-				resolveTypes(f.body, f.body.context);
 			}
 			if(!finishedType(body.context.localValues, body.context))
 				throw new RuntimeException("Type unfinished!");
@@ -342,10 +405,10 @@ public class NaiveTypechecker {
 			System.out.println(body.context.localValues.size);
 			
 		}else if(b instanceof FunctionObjectGenerator fg) {
-			if(fg.functionIdentifier.type == null) {
-				fg.functionIdentifier = context.getFunction(fg.functionIdentifier.name).functionIdentifier;
-//				fixType(fg.functionIdentifier.type, context);
-			}
+//			if(fg.functionIdentifier.type == null) {
+//				fg.functionIdentifier = context.getFunction(fg.functionIdentifier.name).functionIdentifier;
+////				fixType(fg.functionIdentifier.type, context);
+//			}
 //			System.out.println(fg.functionIdentifier.type.getClass());
 		} else if(b instanceof CoreOp o) {
 			if(o.s.equals(",")) {
@@ -415,44 +478,53 @@ public class NaiveTypechecker {
 		Context parent;
 		StructType localValues = new StructType(new ArrayList<>(), new ArrayList<>());
 		
-		Set<String> functions = new HashSet<>();
-		Set<String> types = new HashSet<>();
-		
-		List<Function> functionDefinitions = new ArrayList<>();
-		List<Type> typeDefinitions = new ArrayList<>();
+//		Set<String> functions = new HashSet<>();
+//		Set<String> types = new HashSet<>();
+//		
+//		List<Function> functionDefinitions = new ArrayList<>();
+//		List<Type> typeDefinitions = new ArrayList<>();
+		ArrayList<Function> allDefinedFunctions = new ArrayList<>();
+		Map<String, FunctionOverload> functions = new HashMap<>();
+		Map<String, Type> types = new HashMap<>();
 		
 		public Context(Context parent) {
 			this.parent = parent;
 		}
 		
 		boolean isType(String s) {
-			return types.contains(s) || (parent != null && parent.isType(s));
+			return types.containsKey(s) || (parent != null && parent.isType(s));
 		}
 		Type getType(String s) {
-			for(Type t : typeDefinitions) {
-				if(t.name.equals(s)) {
-					return t;
-				}
-			}
+			Type t = types.get(s);
+			if(t != null)
+				return t;
 			if(parent == null)
 				throw new RuntimeException("Type does not exist");
 			return parent.getType(s);
 		}
-		Function getFunction(String s) {
-			for(Function f : functionDefinitions) {
-				if(f.functionIdentifier.name.equals(s)) {
+		Function getFunction(FunctionIdentifier fid) {
+			FunctionOverload fo = functions.get(fid.name);
+			for(Function f : fo.functions)
+				if(f.functionIdentifier == fid)
 					return f;
-				}
-			}
 			if(parent == null)
-				throw new RuntimeException("Type does not exist: " + s);
-			return parent.getFunction(s);
+				throw new RuntimeException("Function does not exist: " + fid);
+			return parent.getFunction(fid);
 		}
 		
+		void addFunction(String name, Function f) {
+			FunctionOverload fo = functions.get(name);
+			if(fo == null) {
+				functions.put(name, fo = new FunctionOverload());
+			}
+			fo.functions.add(f);
+			allDefinedFunctions.add(f);
+		}
 	}
 	
 
 	class Type {
+		boolean isFinished;
 		int size;
 		String name;
 		Type() {}
@@ -461,22 +533,27 @@ public class NaiveTypechecker {
 			this.name = name;
 		}
 	}
-	class DeferredType extends Type {
-		boolean finished;
-		DeferredType(String name) {
-			this.name = name;
-			this.size = -1;
-			this.finished = false;
-		}
-	}
+//	class DeferredType extends Type {
+//		boolean finished;
+//		DeferredType(String name) {
+//			this.name = name;
+//			this.size = -1;
+//			this.finished = false;
+//		}
+//	}
 	class Primitive extends Type {
 		public Primitive(String name, int size) {
 			super(name, size);
+			isFinished = true;
 		}
 	}
 	class StructType extends Type {
 		ArrayList<Type> types;
 		ArrayList<String> vars;
+		public StructType(String name) {
+			this.name = name;
+			this.isFinished = false;
+		}
 		public StructType(ArrayList<Type> types) {
 			this.types = types;
 		}
@@ -523,6 +600,7 @@ public class NaiveTypechecker {
 		FunctionType(StructType args, StructType rets) {
 			this.args = args;
 			this.rets = rets;
+			this.isFinished = args.isFinished && rets.isFinished;
 		}
 	}
 	class RefinementType extends Type {
@@ -535,6 +613,9 @@ public class NaiveTypechecker {
 	}
 	
 	
+	class FunctionOverload {
+		ArrayList<Function> functions = new ArrayList<>();
+	}
 	class TypeInitializer extends Block {
 		Type type;
 		Body body;
@@ -547,7 +628,7 @@ public class NaiveTypechecker {
 		@Override
 		public String toString() {
 			// TODO Auto-generated method stub
-			return null;
+			return this.getClass().getName() + "@" + Integer.toHexString(this.hashCode());
 		}
 
 		@Override
