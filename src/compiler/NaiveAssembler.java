@@ -22,8 +22,10 @@ import compiler.NaiveTypechecker.Body;
 import compiler.NaiveTypechecker.Context;
 import compiler.NaiveTypechecker.Function;
 import compiler.NaiveTypechecker.FunctionObjectGenerator;
+import compiler.NaiveTypechecker.RefinementType;
 import compiler.NaiveTypechecker.StructType;
 import compiler.NaiveTypechecker.Type;
+import compiler.NaiveTypechecker.TypeCast;
 
 public class NaiveAssembler {
 	static File inputFile = new File("src/code12.hex");
@@ -43,6 +45,8 @@ public class NaiveAssembler {
 		
 		Body moduleBody = (Body)polisher.polish(b, polisher.builtins);
 		polisher.resolveTypes(moduleBody, moduleBody.context);
+
+		polisher.typeChecker(moduleBody, moduleBody.context);
 		System.out.println("Polished:\n" + moduleBody.toParseString() + "\n===========================================\n");
 		
 //		System.out.println(moduleBody.context.functionDefinitions.get(1).body.context.localValues);
@@ -63,7 +67,9 @@ public class NaiveAssembler {
 		
 		
 		for(Function fn : s.context.allDefinedFunctions) {
-//			System.out.println("This defin: " + fn);
+			System.out.println();
+			System.out.println("This defin: " + fn.functionIdentifier.name);
+			
 //			System.out.println(fn.body);
 			InstructionBlock blk = root.addBlock(fn.functionIdentifier.name);
 			
@@ -149,7 +155,7 @@ public class NaiveAssembler {
 		
 		@Override
 		public String toString() {
-			return "@[rbp+"+offset + "] " + type;
+			return "@[rbp+"+offset/8 + "] " + type;
 		}
 	}
 	
@@ -160,6 +166,7 @@ public class NaiveAssembler {
 		
 		for(int i = 0; i < struct.vars.size(); i++) {
 			Variable old = variables.put(struct.vars.get(i), new LocalVariable(struct.types.get(i), totalOffset));
+			System.out.println("Now " + struct.types.get(i) + " " + struct.vars.get(i) + " is on " + totalOffset);
 			if (old != null) throw new RuntimeException("Name shadowing! " + struct.types.get(i) + " " +struct.vars.get(i) + " replaces " + old);
 			totalOffset+=struct.types.get(i).size;
 		}
@@ -177,7 +184,7 @@ public class NaiveAssembler {
 		
 		
 		ib.prolog();
-		System.out.println(">>>>>: " + fnBody.context.localValues);
+		System.out.println(">>>>>: " + fnBody.context.localValues + " " + fnBody.context.localValues.size);
 		ib.allocStack(fnBody.context.localValues.size);
 		
 //		instrs.add(assembler.sub(assembler.RSP, fnBody.allocateSize/8));
@@ -187,7 +194,9 @@ public class NaiveAssembler {
 //		for(int i = 0 ; i < ((FunctionType)fn.type).parameters.variables.size(); i++)
 //			instrs.add(assembler.mov(assembler.new Address(assembler.RBP, null, 0, -i*8-8, 64), (Register)params[i]));
 		HashMap<String, Variable> variables = new HashMap<>();
+		addStructToVariables(variables, fn.functionIdentifier.type.args);
 		addStructToVariables(variables, fnBody.context.localValues);
+		System.out.println("These should exist: " + variables);
 //		System.out.println(variables);
 		for(Block b : fnBody.expr) {
 //			System.out.println(b.getClass());
@@ -199,11 +208,12 @@ public class NaiveAssembler {
 	
 	void compileExpr(InstructionBlock ib, Block b, Context context, Map<String, Variable> variables) {
 //		System.out.println(b.getClass());
+		System.out.println(variables);
 		if(b instanceof CoreOp op && op.operands.size() == 2 && op.s.equals("=")) {
 			
 			if(op.operands.get(0) instanceof AliasParse s && !context.isType(s.s)) {
-
 				compileExpr(ib, op.operands.get(1), context, variables);
+				System.out.println("Pop S " + s.s + " at " + variables.get(s.s));
 				ib.setStackVariable(((LocalVariable)variables.get(s.s)).offset);
 			}
 		}
@@ -228,11 +238,13 @@ public class NaiveAssembler {
 //			return 
 //			throw new RuntimeException("Unimplemented: " + b.getClass());
 //			System.out.println(s.s);
-			System.out.println("Get S " + s.s);
-			System.out.println("Got S " + variables.get(s.s));
+//			System.out.println("Get S " + s.s);
+			System.out.println("Got S " + s.s + " at " + variables.get(s.s));
+			System.out.println("Got S " + s.s + " at " + ((LocalVariable)variables.get(s.s)).offset);
 //			System.out.println();
 			ib.pushStackVariable(((LocalVariable)variables.get(s.s)).offset);
 		} else if(b instanceof NumberParse n) {
+			System.out.println("Pushed thing while at " + variables + " >> " + n);
 			ib.pushLiteral(Long.parseLong(n.s));
 		} else if(b instanceof CoreFunctionCall fc) {
 //			if(fc.function instanceof AccessValue av && fc.argument instanceof AccessStruct aav) {
@@ -253,7 +265,7 @@ public class NaiveAssembler {
 //				System.out.println("Found: " + context.getFunction(fg.functionIdentifier.name));
 //				System.out.println(fc.argument.getClass());
 //				ib.popArguments;
-				if(fc.argument instanceof CoreOp op) {
+				if(fc.argument instanceof CoreOp op && op.s.equals(",")) {
 					for(Block o : op.operands)
 						compileExpr(ib, o, context, variables);
 					ib.popArguments(op.operands.size());
@@ -262,7 +274,7 @@ public class NaiveAssembler {
 					ib.popArguments(1);
 				}
 				
-				Function fn = context.getFunction(fg.functionIdentifier);
+				Function fn = context.overloadedFunction(fg.functionIdentifier.name, fg.functionIdentifier.type.args.types);
 //				System.out.println("Found this function: " + fn.body);
 				ib.callFunction(context.getFunction(fg.functionIdentifier));
 				
@@ -272,12 +284,41 @@ public class NaiveAssembler {
 			} else throw new RuntimeException("Invalid operation: " + fc.function.getClass());
 		} else if(b instanceof FunctionObjectGenerator s) {
 //			throw new RuntimeException("Unimplemented: " + b.getClass());
+		} else if(b instanceof TypeCast tc && tc.type instanceof RefinementType rt) {
+//			compileExpr(ib, tc.value, context, variables);
+//			
+//			rt.customMatch
+//			System.out.println(rt.customMatch.context.localValues);
+			StructType localVariables = (StructType)rt.inheritType;
+
+			compileExpr(ib, tc.value, context, variables);
+			ib.dup();
+			ib.popArguments(1);
+			
+			HashMap<String, Variable> localvariables = new HashMap<>();
+			addStructToVariables(localvariables, localVariables);
+			System.out.println(localVariables);
+			ib.prolog();
+			ib.allocStack(localVariables.size);
+			
+			ib.argumentsToVariables(1);
+//			ib.popArguments(1);
+			System.out.println(localVariables.vars.get(0));
+//			ib.setStackVariable(((LocalVariable)localvariables.get(localVariables.vars.get(0))).offset);
+			for(Block block : rt.customMatch.expr) {
+				compileExpr(ib, block, rt.customMatch.context, localvariables);
+				
+			}
+			ib.segFaultOrContinue();
+			ib.deallocStack(localVariables.size);
+			ib.epilog();
+			
 			
 		} else if(b instanceof Body body) {
 //			throw new RuntimeException("Unimplemented: " + b.getClass());
 			addStructToVariables(variables, body.context.localValues);
 			ib.allocStack(body.context.localValues.size);
-//			System.out.println(variables);
+			System.out.println("Entering with " + variables);
 			for(Block block : body.expr) {
 //				System.out.println(b.getClass());
 				compileExpr(ib, block, body.context, variables);

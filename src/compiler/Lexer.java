@@ -10,6 +10,8 @@ import java.util.Iterator;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import compiler.NaiveTypechecker.Body;
+
 public class Lexer {
 	
 //	static File inputFile = new File("src/testbench/if-statement.hex");
@@ -423,7 +425,7 @@ public class Lexer {
 			Block iterator = parent;
 			while(iterator != null) {
 				if(iterator instanceof CurlyBracketParse
-//						|| iterator instanceof Scope
+						|| iterator instanceof Body
 						)
 					s+="\t";
 				iterator = iterator.parent;

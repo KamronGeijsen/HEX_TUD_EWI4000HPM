@@ -16,6 +16,7 @@ import java.util.Scanner;
 
 import compiler.Lexer.Block;
 import compiler.Lexer.CurlyBracketParse;
+import compiler.MicroAssembler.Address;
 import compiler.NaiveTypechecker.Function;
 
 public class MicroAssembler {
@@ -65,7 +66,7 @@ public class MicroAssembler {
 			if(offset != 0 || args.size() == 0)
 				args.add(offset+"");
 			
-			return "["+String.join("+", args).replace("+-", "+")+"]";
+			return "["+String.join("+", args).replace("+-", "-")+"]";
 		}
 	}
 //	class Variable extends Arg {
@@ -215,6 +216,7 @@ public class MicroAssembler {
 			return ib;
 		}
 		void pushStackVariable(int bitOffset) {
+			System.out.println("pushting thing " + bitOffset);
 			instructions.add(new Push(new Address(RBP, -bitOffset/8-8, 64)));
 		}
 		void pushLiteral(long value) {
@@ -231,10 +233,27 @@ public class MicroAssembler {
 		InstructionBlock binOpStack(String op) {
 			InstructionBlock ib;
 			Map<String, Integer> op1 = Map.of("+", 0, "|", 1, "&", 4, "-", 5, "^", 6);
+			Map<String, Integer> conds1 = Map.of("==", 4, "!=", 5, "<", 12, ">=", 13, ">", 15, "<=", 14);
 			if(op1.containsKey(op))
 				ib= addBlock("binOp."+op,
 						new Pop(RAX),
 						new BinOp(op1.get(op), new Address(RSP, null, 0, 0, 64), RAX)
+					);
+			else if(conds1.containsKey(op))
+				ib= addBlock("binOp."+op,
+						new Pop(RAX),
+						new BinOp(BinaryOperation.XOR.i, RDX, RDX),
+						new BinOp(BinaryOperation.CMP.i, new Address(RSP, null, 0, 0, 64), RAX),
+						new DirectBytes(new byte[] {0x0F, (byte)(0x90+conds1.get(op)), (byte)0xC2}, "sete\t%rdx"), // sete rdx  ([RSP] = equal_flag)
+						new Mov(new Address(RSP, null, 0, 0, 64), RDX)
+					);
+			else if(op.equals("!="))
+				ib= addBlock("binOp."+op,
+						new Pop(RAX),
+						new BinOp(BinaryOperation.XOR.i, RDX, RDX),
+						new BinOp(BinaryOperation.CMP.i, new Address(RSP, null, 0, 0, 64), RAX),
+						new DirectBytes(new byte[] {0x0F, (byte)0x95, (byte)0xC2}, "setne\t%rdx"), // sete rdx  ([RSP] = equal_flag)
+						new Mov(new Address(RSP, null, 0, 0, 64), RDX)
 					);
 			else if(op.equals("%"))
 				ib= addBlock("binOp."+op,
@@ -270,8 +289,24 @@ public class MicroAssembler {
 			
 		}
 		void setStackVariable(int bitOffset) {
+			System.out.println("popping thing " + bitOffset);
 			instructions.add(new Pop(new Address(RBP, -bitOffset/8-8, 64)));
 		}
+		void segFaultOrContinue() {
+			addBlock("segFaultOrContinue",
+					new Pop(RAX),
+					new DirectBytes(new byte[] {0x48, (byte)0x85, (byte)0xC0}, "test %rax,%rax"),
+					new DirectBytes(new byte[] {0x75, 0x02}, "jne noError"),
+					new DirectBytes(new byte[] {0x0f, 0x0b}, "ud2")
+					);
+		}
+		void dup() {
+			addBlock("dup",
+					new Mov(RAX, new Address(RSP, 64)),
+					new Push(RAX)
+					);
+		}
+		
 	}
 	
 	

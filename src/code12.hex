@@ -1,4 +1,6 @@
-refinement powerOfTwo long x: x & (x-1) == 0
+refinement powerOfTwo long x: (x & (x-1)) == 0
+
+refinement lessThan5 long x: x < 5
 
 
 //int a = 5 * inc a + 2
@@ -16,15 +18,28 @@ refinement powerOfTwo long x: x & (x-1) == 0
 //   long y
 //}
 
-fn main () {
+//fn main () {
+//	powerOfTwo a = 32
+//	lessThan5 b = 4
+//	return 37 % a
+//}
+
+fn demonstration -> long {
 	powerOfTwo a = 16
-	return 37 % a
+	return test(42, a)
 }
 
-fn inline {
-	powerOfTwo a = 16
-	return 37 % a
+fn test (long n, powerOfTwo mod) -> long {
+	return n & (mod - 1)
 }
+fn test (long n, long mod) -> long {
+	return n % mod
+}
+
+//fn cast {
+//	powerOfTwo a = 16 as powerOfTwo
+//	return 37 % a
+//}
 
 //fn mod long n, long mod -> long:
 //	return n % mod
