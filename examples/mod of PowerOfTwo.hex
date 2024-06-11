@@ -1,0 +1,47 @@
+refinement powerOfTwo long n: n & (n-1) == 0
+
+fn main {
+	long a = 53
+	
+	print(runFast())
+	print(runFast())
+	print(runFast())
+	print(runFast())
+	print(runFast())
+	print(runFast())
+	print(runFast())
+	print(runFast())
+	print(runFast())
+	print(runFast())
+	
+	print 0
+	
+	print(runSlow())
+	print(runSlow())
+	print(runSlow())
+	print(runSlow())
+	print(runSlow())
+	print(runSlow())
+	print(runSlow())
+	print(runSlow())
+	print(runSlow())
+	print(runSlow())
+	
+	return 0
+}
+
+fn runFast -> long {
+	long a = 53
+	long b = 16
+	long c
+	return (benchmark 1000000:
+		c = a & (b-1))
+	}
+	
+fn runSlow -> long {
+	long a = 53
+	long b = 16
+	long c
+	return (benchmark 1000000:
+		c = a % b)
+	}

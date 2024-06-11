@@ -17,6 +17,7 @@ import compiler.Lexer.Keyword;
 import compiler.Lexer.NumberParse;
 import compiler.Lexer.ParenthesisParse;
 import compiler.Lexer.Symbol;
+import compiler.NaiveParser.CoreBenchmarkStatement;
 import compiler.NaiveParser.CoreFunctionCall;
 import compiler.NaiveParser.CoreFunctionDefinition;
 import compiler.NaiveParser.CoreIfStatement;
@@ -24,7 +25,6 @@ import compiler.NaiveParser.CoreOp;
 import compiler.NaiveParser.CoreRefinementDefinition;
 import compiler.NaiveParser.CoreStructureDefinition;
 import compiler.NaiveParser.CoreWhileStatement;
-import compiler.NaiveTypechecker.Type;
 
 public class NaiveTypechecker {
 
@@ -32,8 +32,9 @@ public class NaiveTypechecker {
 //	static File inputFile = new File("src/code6.hex");
 //	static File inputFile = new File("src/fibonacci.hex");
 //	static File inputFile = new File("src/primes.hex");
-	static File inputFile = new File("src/code12.hex");
+//	static File inputFile = new File("src/code12.hex");
 //	static File inputFile = new File("src/factorial.hex");
+	static File inputFile = new File("examples/mod of PowerOfTwo.hex");
 	
 //	ArrayList<Function> allFunctionDefinitions = new ArrayList<NaivePolisher.Function>();
 	
@@ -111,8 +112,10 @@ public class NaiveTypechecker {
 		ArrayList<Block> commas = new ArrayList<Lexer.Block>();
 		if(b instanceof CoreOp && ((CoreOp) b).s.contentEquals(",")) {
 			ArrayList<Block> ops = ((CoreOp)b).operands;
+			if(ops.size() == 0)
+				return commas;
 			if(ops.size() != 2)
-				throw new RuntimeException("Incorrect arity: , should have 2, but got " + ops.size());
+				throw new RuntimeException("Incorrect arity: , should have 2 (or empty), but got " + ops.size());
 			commas.addAll(parseComma(ops.get(0)));
 			commas.addAll(parseComma(ops.get(1)));
 			return commas;
@@ -127,9 +130,10 @@ public class NaiveTypechecker {
 		todo.add(b);
 		while(!todo.isEmpty()) {
 			Block r = todo.remove(0);
-			if(r instanceof CoreOp o && o.s.equals(",") && o.operands.size() == 2) {
-				todo.add(o.operands.get(0));
-				todo.add(o.operands.get(1));
+			if(r instanceof CoreOp o && o.s.equals(",")) {
+				
+				todo.addAll(o.operands);
+				
 			} else {
 				commaSeparated.add(r);
 			}
@@ -280,7 +284,8 @@ public class NaiveTypechecker {
 				return fc;
 			}
 			else {
-//				System.out.println(fc);
+				System.out.println(b);
+				
 				throw new RuntimeException("Not implemented: " + b.getClass());
 			}
 		} else if(b instanceof Symbol s) {
@@ -302,6 +307,10 @@ public class NaiveTypechecker {
 			return b;
 		} else if(b instanceof CoreWhileStatement iws) {
 			iws.argument = polish(iws.argument, parent);
+			iws.body = polish(iws.body, parent);
+			return b;
+		} else if(b instanceof CoreBenchmarkStatement iws) {
+			iws.expr = polish(iws.expr, parent);
 			iws.body = polish(iws.body, parent);
 			return b;
 		} else if(b instanceof ParenthesisParse p) {
@@ -423,6 +432,9 @@ public class NaiveTypechecker {
 		} else if(b instanceof CoreWhileStatement iws) {
 			resolveTypes(iws.argument, context);
 			resolveTypes(iws.body, ((Body)iws.body).context);
+		} else if(b instanceof CoreBenchmarkStatement iws) {
+			resolveTypes(iws.expr, context);
+			resolveTypes(iws.body, ((Body)iws.body).context);
 		} else {
 			throw new RuntimeException("Not implemented: " + b.getClass());
 		}
@@ -457,6 +469,9 @@ public class NaiveTypechecker {
 				
 				throw new RuntimeException("No match");
 			}
+			if(o.s.equals("print")) {
+				return typeChecker(o.operands.get(0), context);
+			}
 			if(o.s.equals(",")) {
 				ArrayList<Type> args = new ArrayList<>();
 				for(int i = 0; i < o.operands.size(); i++) {
@@ -480,6 +495,8 @@ public class NaiveTypechecker {
 			return tog.type;
 		} else if(b instanceof FunctionObjectGenerator fog) {
 			return fog.functionIdentifier.type;
+		} else if(b instanceof CoreBenchmarkStatement fog) {
+			return typeChecker(fog.body, context);
 		} else if(b instanceof CoreFunctionCall fc) {
 			Type fun = typeChecker(fc.function, context);
 			Type args = typeChecker(fc.argument, context);
@@ -490,6 +507,7 @@ public class NaiveTypechecker {
 			}
 			throw new RuntimeException("Not implemented: " + b.getClass());
 		} else {
+			System.out.println(b);
 			throw new RuntimeException("Not implemented: " + b.getClass());
 		}
 	}

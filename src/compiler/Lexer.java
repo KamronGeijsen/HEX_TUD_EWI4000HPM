@@ -616,6 +616,7 @@ public class Lexer {
 			
 			"is",
 			"in",
+			"as",
 			
 			
 			"new",
@@ -628,6 +629,7 @@ public class Lexer {
 			"printv",
 			"printt",
 			"return",
+			"benchmark",
 			
 			
 			"true",
@@ -657,6 +659,7 @@ public class Lexer {
 			
 			"is",
 			"in",
+			"as",
 			
 			"each",
 			"else",
@@ -672,7 +675,7 @@ public class Lexer {
 			"new",
 			"ans",
 
-			"public"
+			"public",
 	}));
 	public static Set<String> keywordLit= new HashSet<String>(Arrays.asList(new String[] {
 			"ans",

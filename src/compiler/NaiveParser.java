@@ -128,6 +128,11 @@ public class NaiveParser {
 			p.argument = orderOfOperation(p.argument);
 			p.body = orderOfOperation(p.body);
 		}
+		else if(b instanceof CoreBenchmarkStatement) {
+			CoreBenchmarkStatement p = (CoreBenchmarkStatement) b;
+			p.expr = orderOfOperation(p.expr);
+			p.body = orderOfOperation(p.body);
+		}
 		else if(b instanceof CurlyBracketParse) {
 			CurlyBracketParse p = (CurlyBracketParse) b;
 			for(int i = 0; i < p.expressions.size(); i++) {
@@ -156,7 +161,7 @@ public class NaiveParser {
 				p.expressions.get(0).parent = b.parent;
 				return p.expressions.get(0);
 			} else if(p.expressions.size() == 0 && p instanceof ParenthesisParse) {
-				return new Keyword("void");
+				return new CoreOp(",", new ArrayList<>());
 			}
 			
 		}
@@ -260,6 +265,28 @@ public class NaiveParser {
 						def.parent = e;
 					}
 					break;
+				case "benchmark":{
+					l.remove(i);
+					ParenthesisParse expr = new ParenthesisParse();
+					CurlyBracketParse body = new CurlyBracketParse();
+					while(i < l.size()){
+						if(l.get(i) instanceof CurlyBracketParse) {
+							body = (CurlyBracketParse) l.remove(i);
+							break;
+						}
+						Block b = l.remove(i);
+						expr.expressions.add(b);
+						b.parent = expr;
+					}
+					i = l.size();
+					CoreBenchmarkStatement def = new CoreBenchmarkStatement(expr, body);
+					l.add(i, def);
+					i = l.size();
+					expr.parent = def;
+					body.parent = def;
+					def.parent = e;
+					break;
+				}
 				case "lambda": {
 					l.remove(i);
 					
@@ -847,6 +874,30 @@ public class NaiveParser {
 			return new Block[] {argument, body};
 		}
 	}
+	static class CoreBenchmarkStatement extends CoreKeywordExpression {
+		Block expr;
+		Block body;
+		
+		public CoreBenchmarkStatement(ParenthesisParse argument, Block body) {
+			this.expr = argument;
+			this.body = body;
+		}
+		
+		@Override
+		public String toString() {
+			return "$benchmark " + expr + ": " + body;
+		}
+
+		@Override
+		public String toParseString() {
+			return "$benchmark (" + expr.toParseString() + "): " + body.toParseString();
+		}
+		
+		@Override
+		Block[] iterate() {
+			return new Block[] {expr, body};
+		}
+	}
 	static class CoreElseStatement extends CoreKeywordExpression {
 		Block body;
 		
@@ -1064,6 +1115,7 @@ public class NaiveParser {
 				
 				"is",
 				"in",
+				"as",
 			},{
 				"&",
 				"&&",

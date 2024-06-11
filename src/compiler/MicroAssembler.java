@@ -8,16 +8,16 @@ import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
-import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
 import java.util.Scanner;
 
 import compiler.Lexer.Block;
-import compiler.Lexer.CurlyBracketParse;
-import compiler.MicroAssembler.Address;
+import compiler.MicroAssembler.Immediate;
 import compiler.NaiveTypechecker.Function;
+import compiler.NaiveTypechecker.FunctionIdentifier;
 
 public class MicroAssembler {
 	
@@ -33,7 +33,7 @@ public class MicroAssembler {
 		}
 		@Override
 		public String toString() {
-			return "%"+"rax rcx rdx rbx rsp rbp rsi rdi r8 r9 r10 r11 r12 r14 r15".split(" ")[reg];
+			return "%"+"rax rcx rdx rbx rsp rbp rsi rdi r8 r9 r10 r11 r12 r13 r14 r15".split(" ")[reg];
 		}
 	}
 	class Address extends Arg {
@@ -69,6 +69,19 @@ public class MicroAssembler {
 			return "["+String.join("+", args).replace("+-", "-")+"]";
 		}
 	}
+	class RIPrelAddress extends Address {
+		
+		AddressLabel label;
+		public RIPrelAddress(AddressLabel label, int size) {
+			super(null, size);
+			this.label = label;
+		}
+		
+		@Override
+		public String toString() {
+			return "[rip+@"+label+"]";
+		}
+	}
 //	class Variable extends Arg {
 //		String id;
 //		Variable(String id, int size){
@@ -91,15 +104,11 @@ public class MicroAssembler {
 		public Label(Block b) {
 			this.b = b;
 		}
-		@Override
-		public boolean equals(Object obj) {
-			if(obj instanceof Label l)
-				return l.b == b;
-			else return false;
-		}
-		@Override
-		public int hashCode() {
-			return b.hashCode();
+	}
+	class FnLabel extends Arg {
+		FunctionIdentifier fid;
+		public FnLabel(FunctionIdentifier fid) {
+			this.fid = fid;
 		}
 	}
 	
@@ -109,7 +118,7 @@ public class MicroAssembler {
 		InstructionBlock parent;
 		
 		abstract void assemble();
-		void updateLabel(Map<Block, InstructionBlock> labelOffset) {};
+		void updateLabel(Map<FunctionIdentifier, AddressLabel> labelOffset) {};
 		long getAddress() {
 			if(parent == null) {
 				return relIP;
@@ -135,13 +144,15 @@ public class MicroAssembler {
 		@Override
 		void assemble() {
 
-			ByteBuffer bb = ByteBuffer.allocate(256);
-			int byteOffset = 0;
+			ByteBuffer bb = ByteBuffer.allocate(8192);
+			
+//			int byteOffset = 0;
 			for(Instruction i : instructions) {
 				i.parent = this;
 				i.assemble();
 //				System.out.println(i.getClass());
 				i.relIP = bb.position();
+//				System.out.println(i.getClass());
 				bb.put(i.bytes);
 				
 //				i.relIP = byteOffset;
@@ -152,8 +163,8 @@ public class MicroAssembler {
 		
 		
 		@Override
-		void updateLabel(Map<Block, InstructionBlock> labelOffset) {
-			ByteBuffer bb = ByteBuffer.allocate(256);
+		void updateLabel(Map<FunctionIdentifier, AddressLabel> labelOffset) {
+			ByteBuffer bb = ByteBuffer.allocate(8192);
 			for(Instruction i : instructions) {
 				i.updateLabel(labelOffset);
 				bb.put(i.bytes);
@@ -161,7 +172,16 @@ public class MicroAssembler {
 			bytes = Arrays.copyOf(bb.array(), bb.position());
 		}
 	
-	
+		AddressLabel label() {
+			AddressLabel label;
+			instructions.add(label=new AddressLabel());
+			return label;
+		}
+		AddressLabel dataLabel(int size) {
+			AddressLabel label;
+			instructions.add(label=new AddressLabel(size/8));
+			return label;
+		}
 		InstructionBlock addBlock(String name, Instruction... instructions) {
 			InstructionBlock ib = new InstructionBlock(this, name, instructions);
 			this.instructions.add(ib);
@@ -181,12 +201,12 @@ public class MicroAssembler {
 		}
 		InstructionBlock allocStack(int bits) {
 			return addBlock("allocStack",
-					new BinOp(BinaryOperation.SUB.i, RSP, new Immediate(bits/8))
+					new BinOp(BinaryOperation.SUB, RSP, new Immediate(bits/8))
 					);
 		}
 		InstructionBlock deallocStack(int bits) {
 			return addBlock("deallocStack",
-					new BinOp(BinaryOperation.ADD.i, RSP, new Immediate(bits/8))
+					new BinOp(BinaryOperation.ADD, RSP, new Immediate(bits/8))
 					);
 		}
 		InstructionBlock argumentsToVariables(int parameters) {
@@ -216,7 +236,6 @@ public class MicroAssembler {
 			return ib;
 		}
 		void pushStackVariable(int bitOffset) {
-			System.out.println("pushting thing " + bitOffset);
 			instructions.add(new Push(new Address(RBP, -bitOffset/8-8, 64)));
 		}
 		void pushLiteral(long value) {
@@ -225,14 +244,14 @@ public class MicroAssembler {
 		void pushRet() {
 			instructions.add(new Push(RAX));
 		}
-		void callFunction(Function function) {
-			System.out.println("Label define:  " + function.body);
+		void callFunction(FunctionIdentifier fid) {
+//			System.out.println("Label define:  " + function.body);
 //			System.out.println(function.body);
-			instructions.add(new Call(new Label(function.body)));
+			instructions.add(new Call(new FnLabel(fid)));
 		}
 		InstructionBlock binOpStack(String op) {
 			InstructionBlock ib;
-			Map<String, Integer> op1 = Map.of("+", 0, "|", 1, "&", 4, "-", 5, "^", 6);
+			Map<String, BinaryOperation> op1 = Map.of("+", BinaryOperation.ADD, "|", BinaryOperation.OR, "&", BinaryOperation.AND, "-", BinaryOperation.SUB, "^", BinaryOperation.XOR);
 			Map<String, Integer> conds1 = Map.of("==", 4, "!=", 5, "<", 12, ">=", 13, ">", 15, "<=", 14);
 			if(op1.containsKey(op))
 				ib= addBlock("binOp."+op,
@@ -242,16 +261,16 @@ public class MicroAssembler {
 			else if(conds1.containsKey(op))
 				ib= addBlock("binOp."+op,
 						new Pop(RAX),
-						new BinOp(BinaryOperation.XOR.i, RDX, RDX),
-						new BinOp(BinaryOperation.CMP.i, new Address(RSP, null, 0, 0, 64), RAX),
+						new BinOp(BinaryOperation.XOR, RDX, RDX),
+						new BinOp(BinaryOperation.CMP, new Address(RSP, null, 0, 0, 64), RAX),
 						new DirectBytes(new byte[] {0x0F, (byte)(0x90+conds1.get(op)), (byte)0xC2}, "sete\t%rdx"), // sete rdx  ([RSP] = equal_flag)
 						new Mov(new Address(RSP, null, 0, 0, 64), RDX)
 					);
 			else if(op.equals("!="))
 				ib= addBlock("binOp."+op,
 						new Pop(RAX),
-						new BinOp(BinaryOperation.XOR.i, RDX, RDX),
-						new BinOp(BinaryOperation.CMP.i, new Address(RSP, null, 0, 0, 64), RAX),
+						new BinOp(BinaryOperation.XOR, RDX, RDX),
+						new BinOp(BinaryOperation.CMP, new Address(RSP, null, 0, 0, 64), RAX),
 						new DirectBytes(new byte[] {0x0F, (byte)0x95, (byte)0xC2}, "setne\t%rdx"), // sete rdx  ([RSP] = equal_flag)
 						new Mov(new Address(RSP, null, 0, 0, 64), RDX)
 					);
@@ -284,12 +303,19 @@ public class MicroAssembler {
 //			instructions.add(ib);
 			return ib;
 		}
+		void callExternal(AddressLabel lbl) {
+			addBlock("callstub external",
+					new Mov(RBX, RSP),
+					new BinOp(BinaryOperation.AND, RSP, new Immediate(-16)),
+					new Call(new RIPrelAddress(lbl, 64)),
+					new Mov(RSP, RBX)
+					);
+		}
 		void ret() {
 			instructions.add(new Ret());
 			
 		}
 		void setStackVariable(int bitOffset) {
-			System.out.println("popping thing " + bitOffset);
 			instructions.add(new Pop(new Address(RBP, -bitOffset/8-8, 64)));
 		}
 		void segFaultOrContinue() {
@@ -306,20 +332,82 @@ public class MicroAssembler {
 					new Push(RAX)
 					);
 		}
-		
+		InstructionBlock setupBenchmark() {
+			return addBlock("setupBenchmark", 
+					new DirectBytes(new byte[] {0x0F, 0x31}, "rdtsc"), // rdtsc
+					new ShiftOp(BinaryOperation.SHL, RDX, new Immediate(32)),
+//					new BinOp(BinaryOperation.ADD, RAX, RDX),
+//					new BinOp(BinaryOperation.CMP, R15, RDX)
+					new LEA(R15, new Address(RDX, RAX, 1, 0, 64))
+			);
+		}
+		InstructionBlock measureBenchmark() {
+			return addBlock("measureBenchmark", 
+					new DirectBytes(new byte[] {0x0F, 0x31}, "rdtsc"), // rdtsc
+					new ShiftOp(BinaryOperation.SHL, RDX, new Immediate(32)),
+					new BinOp(BinaryOperation.ADD, RAX, RDX),
+					new BinOp(BinaryOperation.SUB, RAX, R15),
+					new Push(RAX)
+			);
+		}
+		InstructionBlock repeatSetupBenchmark(long repeat) {
+			return addBlock("repeatBenchmark", new Mov(R14, new Immediate(repeat)));
+		}
+		InstructionBlock repeatBenchmark(AddressLabel label) {
+			return addBlock("repeatBenchmark", 
+					new UnOp(UnaryOp.DEC, R14),
+					new Jcc(Condition.NE, label)
+					);
+		}
 	}
 	
 	
-	
-	class AddressLabel extends Instruction {
-
-
-		int relIP;
+	class LEA extends Instruction {
+		Arg src;
+		Arg dst;
+		public LEA(Arg dst, Arg src) {
+			this.src = src;
+			this.dst = dst;
+		}
 		@Override
 		void assemble() {
+			int opSize = dst.size;
+			ByteBuffer bb = ByteBuffer.allocate(256);
+			bb.order(ByteOrder.LITTLE_ENDIAN);
+			
+			if(src instanceof Address a) {
+				byte rex = (byte) ((opSize==64?0x48:0) | (((Register)dst).reg>=8?0x44:0) | (a.base.reg>=8?0x42:0));
+				if(rex > 0)
+					bb.put(rex);
+				
+				bb.put((byte) 0x8d);
+				if(dst instanceof Register d) {
+					mr(bb, d.reg&7, a);
+				}
+			}
+			bytes = Arrays.copyOf(bb.array(), bb.position());
+		}
+		@Override
+		public String toString() {
+			return "lea\t"+dst+", " + src;
+		}
+	}
+	class AddressLabel extends Instruction {
+		public AddressLabel() {
 			bytes = new byte[0];
 		}
-		
+		public AddressLabel(int size) {
+			bytes = new byte[size];
+		}
+		@Override
+		void assemble() {
+			
+		}
+
+		@Override
+		public String toString() {
+			return "lbl:";
+		}
 	}
 	class DirectBytes extends Instruction {
 
@@ -367,10 +455,9 @@ public class MicroAssembler {
 			bb.order(ByteOrder.LITTLE_ENDIAN);
 			
 			if(src instanceof Immediate i) {
-				if(opSize == 64)
-					bb.put(new byte	[] { 0x48, (byte) 0xC7});
-				else if(opSize == 32)
-					bb.put(new byte	[] { (byte) 0xC7});
+				byte rex = (byte) ((opSize==64?0x48:0) | (((Register)dst).reg>=8?0x41:0));
+				if(rex > 0) bb.put(rex);
+				bb.put((byte) 0xC7);
 				
 				mr(bb, 0, dst);
 
@@ -393,10 +480,12 @@ public class MicroAssembler {
 		}
 	}
 	class BinOp extends Instruction {
-		int op;
+		BinaryOperation op;
 		Arg src;
 		Arg dst;
-		public BinOp(int op, Arg dst, Arg src) {
+		public BinOp(BinaryOperation op, Arg dst, Arg src) {
+			if(!List.of(BinaryOperation.ADD, BinaryOperation.SUB, BinaryOperation.XOR, BinaryOperation.AND, BinaryOperation.OR, BinaryOperation.CMP, BinaryOperation.ADC, BinaryOperation.SBB).contains(op))
+				throw new RuntimeException("Invalid operation: " + op);
 			this.op = op;
 			this.src = src;
 			this.dst = dst;
@@ -408,20 +497,18 @@ public class MicroAssembler {
 			bb.order(ByteOrder.LITTLE_ENDIAN);
 			
 			if(src instanceof Immediate i) {
+				byte rex = (byte) ((opSize==64?0x48:0) | (((Register)dst).reg>=8?0x44:0));
+				if(rex > 0)
+					bb.put(rex);
+				
 				if((long)(byte)i.val == i.val) {
-					if(opSize == 64)
-						bb.put(new byte	[] { 0x48, (byte) (0x83)});
-					else if(opSize == 32)
-						bb.put(new byte	[] { (byte) 0x83});
+					bb.put((byte)0x83);
 				} else if((long)(int)i.val == i.val) {
-					if(opSize == 64)
-						bb.put(new byte	[] { 0x48, (byte) (0x81)});
-					else if(opSize == 32)
-						bb.put(new byte	[] { (byte) 0x81});
+					bb.put((byte)0x81);
 				}
 
 				
-				mr(bb, op, dst);
+				mr(bb, op.i, dst);
 				if((long)(byte)i.val == i.val)
 					bb.put((byte)i.val);
 				else if((long)(int)i.val == i.val)
@@ -430,9 +517,9 @@ public class MicroAssembler {
 
 				
 				if(opSize == 64)
-					bb.put(new byte	[] { 0x48, (byte) (0x01 + (op << 3))});
+					bb.put(new byte	[] { 0x48, (byte) (0x01 + (op.i << 3))});
 				else if(opSize == 32)
-					bb.put(new byte	[] {(byte) (0x01 + (op << 3))});
+					bb.put(new byte	[] {(byte) (0x01 + (op.i << 3))});
 //				System.out.println(op + "\t" + dst + "\t" + src);
 //				System.out.println(Arrays.toString(Arrays.copyOf(bb.array(), bb.position())));
 				if(src instanceof Register r) {
@@ -441,11 +528,16 @@ public class MicroAssembler {
 				
 				
 			} else if(dst instanceof Register r) {
-				if(opSize == 64)
-					bb.put(new byte	[] { 0x48, (byte) (0x03 + (op << 3))});
-				else if(opSize == 32)
-					bb.put(new byte	[] {(byte) (0x03 + (op << 3))});
-				mr(bb, r.reg, src);
+				byte rex = (byte) ((opSize==64?0x48:0) | (((Register)dst).reg>=8?0x44:0));
+				if(src instanceof Address a)
+					rex |= (byte) ((a.base != null && a.base.reg >= 8 ?0x41:0) | (a.index != null && a.index.reg >= 8 ?0x42:0));
+				if(src instanceof Register a)
+					rex |= (byte) (a.reg >= 8 ?0x41:0);
+				if(rex > 0)
+					bb.put(rex);
+				
+				bb.put((byte) (0x03 + (op.i << 3)));
+				mr(bb, r.reg&7, src);
 				
 			}
 			
@@ -453,7 +545,86 @@ public class MicroAssembler {
 		}
 		@Override
 		public String toString() {
-			return "add or adc sbb and sub xor cmp".split(" ")[op]+"\t"+dst+", " + src;
+			return op.toString().toLowerCase()+"\t"+dst+", " + src;
+		}
+	}
+	class UnOp extends Instruction {
+		UnaryOp op;
+		Arg a;
+		public UnOp(UnaryOp op, Arg a) {
+//			if(!List.of(BinaryOperation.ADD, BinaryOperation.SUB, BinaryOperation.XOR, BinaryOperation.AND, BinaryOperation.OR, BinaryOperation.CMP, BinaryOperation.ADC, BinaryOperation.SBB).contains(op))
+//				throw new RuntimeException("Invalid operation: " + op);
+			this.op = op;
+			this.a = a;
+		}
+		@Override
+		void assemble() {
+			int opSize = a.size;
+			ByteBuffer bb = ByteBuffer.allocate(256);
+			bb.order(ByteOrder.LITTLE_ENDIAN);
+			
+			
+			byte rex = (byte) ((opSize==64?0x48:0) | (((Register)a).reg>=8?0x41:0));
+			if(a instanceof Address a)
+				rex |= (byte) ((a.base != null && a.base.reg >= 8 ?0x41:0) | (a.index != null && a.index.reg >= 8 ?0x42:0));
+			if(a instanceof Register a)
+				rex |= (byte) (a.reg >= 8 ?0x41:0);
+			if(rex > 0)
+				bb.put(rex);
+			
+			bb.put((byte) 0xff);
+			mr(bb, op.i, a);
+			
+			bytes = Arrays.copyOf(bb.array(), bb.position());
+		}
+		@Override
+		public String toString() {
+			return op.toString().toLowerCase()+"\t"+a;
+		}
+	}
+	class ShiftOp extends Instruction {
+		BinaryOperation op;
+		Arg src;
+		Arg dst;
+		public ShiftOp(BinaryOperation op, Arg dst, Arg src) {
+			if(!List.of(BinaryOperation.SHL, BinaryOperation.SHR, BinaryOperation.SAR, BinaryOperation.ROL, BinaryOperation.ROR, BinaryOperation.RCL, BinaryOperation.RCR).contains(op))
+				throw new RuntimeException("Invalid operation: " + op);
+			this.op = op;
+			this.src = src;
+			this.dst = dst;
+		}
+		@Override
+		void assemble() {
+			int opSize = dst.size;
+			ByteBuffer bb = ByteBuffer.allocate(256);
+			bb.order(ByteOrder.LITTLE_ENDIAN);
+			if(src instanceof Immediate i) {
+				if(opSize == 64)
+					bb.put(new byte	[] { 0x48, (byte) (i.val == 1 ? 0xd1 : 0xc1)});
+				else if(opSize == 32)
+					bb.put(new byte	[] { (byte) (i.val == 1 ? 0xd1 : 0xc1)});
+
+				mr(bb, op.i, dst);
+				if((i.val & 0xff) == i.val)
+					bb.put((byte)i.val);
+				else
+					throw new RuntimeException("Invalid operation");
+			
+			} else if(dst instanceof Register r && r == RCX) {
+				if(opSize == 64)
+					bb.put(new byte	[] { 0x48, (byte) (0xd3)});
+				else if(opSize == 32)
+					bb.put(new byte	[] { (byte) 0xd3});
+
+				mr(bb, op.i, dst);
+				
+			}
+			
+			bytes = Arrays.copyOf(bb.array(), bb.position());
+		}
+		@Override
+		public String toString() {
+			return op.toString().toLowerCase()+"\t"+dst+", " + src;
 		}
 	}
 	class Push extends Instruction {
@@ -533,28 +704,41 @@ public class MicroAssembler {
 				bytes = new byte[] {(byte) (0x50 + r.reg)};
 			} else if(fn instanceof Label l) {
 				bytes = new byte[] {(byte) 0xe8,0,0,0,0};
+			} else if(fn instanceof FnLabel l) {
+				bytes = new byte[] {(byte) 0xe8,0,0,0,0};
+			} else if(fn instanceof RIPrelAddress a) {
+				bytes = new byte[] {(byte) 0xFF, 0x15, 0,0,0,0};
 			}
 		}
 		
 		
 		@Override
-		void updateLabel(Map<Block, InstructionBlock> labelOffset) {
+		void updateLabel(Map<FunctionIdentifier, AddressLabel> labelOffset) {
 			
-			if(fn instanceof Label l) {
-				System.out.println("label thing here: " + l.b);
-				int value = (int) (labelOffset.get(l.b).getAddress()-getAddress()-bytes.length);
+			if(fn instanceof FnLabel l) {
+//				System.out.println("label thing here: " + l.b);
+				int value = (int) (labelOffset.get(l.fid).getAddress()-getAddress()-bytes.length);
 				bytes[1] = (byte)((value>>0)&0xff);
 				bytes[2] = (byte)((value>>8)&0xff);
 				bytes[3] = (byte)((value>>16)&0xff);
 				bytes[4] = (byte)((value>>24)&0xff);
+			} else if(fn instanceof RIPrelAddress a) {
+				int value = (int) (a.label.getAddress()-getAddress()-bytes.length);
+				bytes[2] = (byte)((value>>0)&0xff);
+				bytes[3] = (byte)((value>>8)&0xff);
+				bytes[4] = (byte)((value>>16)&0xff);
+				bytes[5] = (byte)((value>>24)&0xff);
 			}
 			
 		}
 		
 		@Override
 		public String toString() {
-			if(fn instanceof Label l)
-				return "call\t%04x".formatted(getAddress() + bytes.length + (bytes[1] | bytes[2]<<8 | bytes[3]<<16 | bytes[4]<<24));
+			if(fn instanceof FnLabel l) {
+				return "call\t%04x".formatted(getAddress() + bytes.length + ByteBuffer.wrap(bytes, 1, 4).order(ByteOrder.LITTLE_ENDIAN).getInt());
+			}
+			if(fn instanceof RIPrelAddress a)
+				return "call\t[rip+@%04x]".formatted(getAddress() + bytes.length + ByteBuffer.wrap(bytes, 2, 4).order(ByteOrder.LITTLE_ENDIAN).getInt());
 			return super.toString();
 		}
 	}
@@ -570,37 +754,82 @@ public class MicroAssembler {
 			return "ret";
 		}	
 	}
+	class Jcc extends Instruction {
+		Condition cond;
+		AddressLabel label;
+		
+		Jcc(Condition cond, AddressLabel label){
+			this.cond = cond;
+			this.label = label;
+		}
+		
+		@Override
+		void assemble() {
+			bytes = new byte[] {(byte) (0x70+cond.i),0};
+		}
+		
+		@Override
+		void updateLabel(Map<FunctionIdentifier, AddressLabel> labelOffset) {
+			int value = (int) (label.getAddress()-getAddress()-bytes.length);
+			bytes[1] = (byte)((value>>0)&0xff);
+		}
+		@Override
+		public String toString() {
+			return "j"+cond.toString().toLowerCase()+"\t%04x".formatted(getAddress() + bytes.length + bytes[1]);
+			
+		}
+	}
+	
 	void mr(ByteBuffer bb, int r, Arg mr) {
-		if(mr instanceof Register s) {
-			bb.put((byte) (0xC0 + (r << 3) + s.reg));
-		} else if(mr instanceof Address a) {
-			if(a.base == RSP) {
-				if(a.offset == 0 && a.base.reg != 5) {
-					bb.put((byte) (0x00 + (r << 3) + a.base.reg));
-					bb.put((byte)0x24);
-				} else if(a.offset == (int)(byte)a.offset) {
-					bb.put((byte) (0x40 + (r << 3) + a.base.reg));
-					bb.put((byte)0x24);
+		if (mr instanceof Register s) {
+			bb.put((byte) (0xC0 + (r << 3) + (s.reg&7)));
+		} else if (mr instanceof Address a) {
+			int indexReg = 0;
+			if(a.index != null)
+				indexReg = a.index.reg&7;
+			int baseReg = a.base.reg&7;
+			if (a.index != null) {
+				int scale = new int[] {-1, 0, 1, -1, 2, -1, -1, -1, -1, 3}[a.scale];
+				if(scale == -1) throw new RuntimeException("Invalid operand, a.scale should be 1,2,4,8, but got " + a.scale);
+				
+
+				if (a.offset == 0 && baseReg != 5) {
+					bb.put((byte) (0x04 + (r << 3)));
+					bb.put((byte) ((scale << 6) + (indexReg << 3) + baseReg));
+				} else if (a.offset == (int) (byte) a.offset) {
+					bb.put((byte) (0x44 + (r << 3)));
+					bb.put((byte) ((scale << 6) + (indexReg << 3) + baseReg));
 					bb.put((byte) a.offset);
-				}  else {
-					bb.put((byte) (0x80 + (r << 3) + a.base.reg));
-					bb.put((byte)0x24);
+				} else {
+					bb.put((byte) (0x84 + (r << 3)));
+					bb.put((byte) ((scale << 6) + (indexReg << 3) + baseReg));
+					bb.putInt(a.offset);
+				}
+			} else if (a.base == RSP) {
+				if (a.offset == 0 && baseReg != 5) {
+					bb.put((byte) (0x00 + (r << 3) + baseReg));
+					bb.put((byte) 0x24);
+				} else if (a.offset == (int) (byte) a.offset) {
+					bb.put((byte) (0x40 + (r << 3) + baseReg));
+					bb.put((byte) 0x24);
+					bb.put((byte) a.offset);
+				} else {
+					bb.put((byte) (0x80 + (r << 3) + baseReg));
+					bb.put((byte) 0x24);
 					bb.putInt(a.offset);
 				}
 			} else {
-				if(a.offset == 0 && a.base.reg != 5) {
-					bb.put((byte) (0x00 + (r << 3) + a.base.reg));
-				} else if(a.offset == (int)(byte)a.offset) {
-					bb.put((byte) (0x40 + (r << 3) + a.base.reg));
+				if (a.offset == 0 && baseReg != 5) {
+					bb.put((byte) (0x00 + (r << 3) + baseReg));
+				} else if (a.offset == (int) (byte) a.offset) {
+					bb.put((byte) (0x40 + (r << 3) + baseReg));
 					bb.put((byte) a.offset);
-				}  else {
-					bb.put((byte) (0x80 + (r << 3) + a.base.reg));
+				} else {
+					bb.put((byte) (0x80 + (r << 3) + baseReg));
 					bb.putInt(a.offset);
 				}
 			}
-			
 		}
-		
 	}
 	
 	public Register RAX = new Register(0, 64);
@@ -620,126 +849,44 @@ public class MicroAssembler {
 	Register R14 = new Register(14, 64);
 	Register R15 = new Register(15, 64);
 
-	
-	
-	
-	
-	
-//	Instruction[] prolog() {
-//		return new Instruction[] {
-//			new Push(RBP),
-//			new Mov(RBP, RSP),
-//		};
-//	}
-//	Instruction[] epilog() {
-//		return new Instruction[] { 
-//			new Mov(RSP, RBP),
-//			new Pop(RBP)
-//		};
-//	}
-//	Instruction[] alloc(StackVariable v) {
-//		return new Instruction[] { new BinOp(5, RSP, new Immediate(v.size/8)) };
-//	}
-//	Instruction[] dealloc(StackVariable v) {
-//		return new Instruction[] { new BinOp(0, RSP, new Immediate(v.size/8)) };
-//	}
-//	
-//	Instruction[] mov(Register r, long val) {
-//		return new Instruction[] {new Mov(r, new Immediate(val))};
-//	}
-//	Instruction[] mov(StackVariable v, long val) {
-//		return new Instruction[] {new Mov(new Address(RBP, null, 0, -v.stackOffset-8, 64), new Immediate(val))};
-//	}
-//	Instruction[] mov(StackVariable v, Register r) {
-//		return new Instruction[] {new Mov(new Address(RBP, null, 0, -v.stackOffset-8, 64), r)};
-//	}
-//	Instruction[] mov(Register r, StackVariable v) {
-//		return new Instruction[] {new Mov(r, new Address(RBP, null, 0, -v.stackOffset-8, 64))};
-//	}
-//	Instruction[] mov(Register r, Address addr) {
-//		return new Instruction[] {new Mov(r, addr)};
-//	}
-//	Instruction[] mov(Address addr, Register r) {
-//		return new Instruction[] {new Mov(addr, r)};
-//	}
-//	Instruction[] mov(Register d, Register s) {
-//		return new Instruction[] {new Mov(d, s)};
-//	}
-//	
-//	Instruction[] binOp(int op, Arg a, long val) {
-//		return new Instruction[] {new BinOp(op, a, new Immediate(val))};
-//	}
-//	Instruction[] binOp(int op, Arg a, Arg b) {
-//		if(a instanceof StackVariable v)
-//			a = new Address(RBP, null, 0, -v.stackOffset-8, 64);
-//		if(b instanceof StackVariable v)
-//			b = new Address(RBP, null, 0, -v.stackOffset-8, 64);
-//		
-//		
-//		if(a instanceof Address a1 && b instanceof Address a2)
-//			return new Instruction[] {new Mov(RAX, b), new BinOp(op, a, RAX)};
-//		return new Instruction[] {new BinOp(op, a, b)};
-//	}
-//	Instruction[] binOpStack(String op) {
-//		Map<String, Integer> op1 = Map.of("+", 0, "|", 1, "&", 4, "-", 5, "^", 6);
-//		if(op1.containsKey(op))
-//			return new Instruction[] {
-//					new Pop(RAX),
-//					new BinOp(op1.get(op), new Address(RSP, null, 0, 0, 64), RAX)
-//				};
-//		if(op.equals("%"))
-//			return new Instruction[] {
-//					new Pop(RAX),
-//					new DirectBytes(new byte[] {0x48, (byte)0x99}, "cqo"), // cqo  (sign extends RAX into RAX:RDX)
-//					new DirectBytes(new byte[] {0x48, (byte)0xf7, 0x34, 0x24}, "div\t[rsp]"), // div [rsp]  (RAX,RDX = RAX:RDX / [RSP], RAX:RDX % [RSP])
-//					new Mov(new Address(RSP, null, 0, 0, 64), RDX)
-//				};
-//		if(op.equals("/"))
-//			return new Instruction[] {
-//					new Pop(RAX),
-//					new DirectBytes(new byte[] {0x48, (byte)0x99}, "cqo"), // cqo  (sign extends RAX into RAX:RDX)
-//					new DirectBytes(new byte[] {0x48, (byte)0xf7, 0x34, 0x24}, "div\t[rsp]"), // div [rsp]  (RAX,RDX = RAX:RDX / [RSP], RAX:RDX % [RSP])
-//					new Mov(new Address(RSP, null, 0, 0, 64), RAX)
-//				};
-//		
-//		throw new RuntimeException("Invalid operation: " + op);
-//	}
-//	
-//	Instruction[] add(Arg a, long val) {
-//		return binOp(0, a, val);
-//	}
-//	Instruction[] add(Arg a, Arg b) {
-//		return binOp(0, a, b);
-//	}
-//	Instruction[] sub(Arg a, long val) {
-//		return new Instruction[] {new BinOp(5, a, new Immediate(val))};
-//	}
-//	Instruction[] returnV(StackVariable v) {
-//		return new Instruction[] {
-//				new Mov(RAX, new Address(RBP, null, 0, -v.stackOffset-8, 64)),
-//				new Mov(RSP, RBP),
-//				new Pop(RBP),
-//				new Ret()
-//			};
-//	}
-//	Instruction[] returnV(Address a) {
-//		return new Instruction[] {
-//				new Mov(RAX, a),
-//				new Mov(RSP, RBP),
-//				new Pop(RBP),
-//				new Ret()
-//			};
-//	}
-//	Instruction[] ret(long val) {
-//		return new Instruction[] {
-//				new Mov(RAX, new Immediate(val)),
-//				new Ret()
-//		};
-//	}
-//	Instruction[] ret() {
-//		return new Instruction[] {new Ret()};
-//	}
-	
+	enum UnaryOp {
+		INC(0),
+		DEC(1),
+		CALL(2),
+		//
+		JMP(4),
+		//
+		PUSH(6),
+		//
+		;
+		int i;
+		private UnaryOp(int i) {
+			this.i = i;
+		}
+	}
+	enum Condition {
+		O(0),
+		NO(1),
+		B(2),
+		NB(3),
+		E(4),
+		NE(5),
+		BE(6),
+		A(7),
+		S(8),
+		NS(9),
+		PE(10),
+		PO(11),
+		L(12),
+		GE(13),
+		LE(14),
+		G(15),
+		;
+		int i;
+		private Condition(int i) {
+			this.i = i;
+		}
+	}
 	enum BinaryOperation {
 		ADD(0),
 		OR(1),
@@ -822,7 +969,7 @@ public class MicroAssembler {
 //		byte[] bytes = toArr("488D1D0000000048C7C100CA9A3B48C7C7A086010048C7C664000000488D15080000004889F8489948F7FE4889D0488B04C34883C30048FFC975E8C3E800000000");
 		
 		// Mod
-		byte[] bytes = toArr("4889C84889D6489948F7FE4889D0C3"); // slow
+//		byte[] bytes = toArr("4889C84889D6489948F7FE4889D0C3"); // slow
 //		byte[] bytes = toArr("488D41FF4821D0C3"); // fast
 		
 		// Indexing
@@ -844,7 +991,7 @@ public class MicroAssembler {
 //					System.out.print(Integer.toHexString((b&255)|0x100).substring(1) + " ");
 //				System.out.println();
 //			}
-		assemble(bytes);
+//		assemble(bytes);
 		
 	}
 	
@@ -853,7 +1000,7 @@ public class MicroAssembler {
 		
 		try (FileOutputStream fos = new FileOutputStream("compiled\\code.hexe")) {
 			fos.write(bytes);
-			System.out.println("written");
+			System.out.println("written " + bytes.length);
 		} catch (IOException e) {
 			e.printStackTrace();
 		}

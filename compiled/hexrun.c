@@ -1,8 +1,8 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <windows.h>
 
 typedef unsigned long long u64;
-
 
 void print(u64 v) {
     printf("> %llu\n", v);
@@ -18,30 +18,41 @@ void* alloc(u64 size) {
     return malloc(size);
 }
 
-void dealloc(u64* ptr) {
+void dealloc(void* ptr) {
     free(ptr);
 }
 
+void* builtInFunctions[] = { (void*)print, (void*)scan, (void*)alloc, (void*)dealloc };
 
 int main(int argc, char* argv[]) {
     if (argc < 2) {
-       fprintf(stderr, "Usage: %s <path_to_binary_file>\n", argv[0]);
-       return 1;
+        fprintf(stderr, "Usage: %s <path_to_binary_file>\n", argv[0]);
+        return 1;
     }
     const char* filePath = argv[1];
     FILE* file = fopen(filePath, "rb");
     if (file == NULL) {
-       perror("Failed to open file");
-       return 1;
+        perror("Failed to open file");
+        return 1;
     }
     fseek(file, 0, SEEK_END);
     long fileSize = ftell(file);
     fseek(file, 0, SEEK_SET);
 
-    // Allocate executable memory
-    void* mem = VirtualAlloc(NULL, fileSize, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+    // Calculate the total size needed
+    size_t totalSize = sizeof(builtInFunctions) + fileSize;
 
-    // Read file into memory
+    // Allocate executable memory
+    void* mem = VirtualAlloc(NULL, totalSize, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+    if (mem == NULL) {
+        perror("VirtualAlloc failed");
+        fclose(file);
+        return 1;
+    }
+
+    // Copy built-in functions to the allocated memory
+
+    // Read binary file into the allocated memory
     if (fread(mem, 1, fileSize, file) != fileSize) {
         perror("Failed to read file");
         fclose(file);
@@ -49,16 +60,21 @@ int main(int argc, char* argv[]) {
         return 1;
     }
     fclose(file);
+    memcpy(mem, builtInFunctions, sizeof(builtInFunctions));
+
+    // Change the memory protection to executable
     DWORD oldProtect;
-    VirtualProtect(mem, fileSize, PAGE_EXECUTE_READ, &oldProtect);
-    // Interpret the first part of the memory as int64_t (assuming file is large enough)
-    u64 (*func)(u64, u64) = mem;
-    u64 result = func(255, 6);  // Example arguments
+    if (!VirtualProtect(mem, totalSize, PAGE_EXECUTE_READ, &oldProtect)) {
+        perror("VirtualProtect failed");
+        VirtualFree(mem, 0, MEM_RELEASE);
+        return 1;
+    }
+
+    // Interpret the function pointer from the allocated memory
+    u64(*func)() = (u64(*)())((char*)mem + sizeof(builtInFunctions));
+    u64 result = func();  // Call the function
 
     printf("Function returned: %llu\n", result);
-
-
-
 
     VirtualFree(mem, 0, MEM_RELEASE);
     return 0;
