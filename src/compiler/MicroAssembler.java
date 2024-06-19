@@ -1000,7 +1000,7 @@ public class MicroAssembler {
 		
 		try (FileOutputStream fos = new FileOutputStream("compiled\\code.hexe")) {
 			fos.write(bytes);
-			System.out.println("written " + bytes.length);
+			System.out.println("written " + bytes.length + "bytes");
 		} catch (IOException e) {
 			e.printStackTrace();
 		}

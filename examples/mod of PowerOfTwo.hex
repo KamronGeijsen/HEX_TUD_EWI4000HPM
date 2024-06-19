@@ -1,4 +1,4 @@
-refinement powerOfTwo long n: n & (n-1) == 0
+refinement powerOfTwo long n: return n & (n-1) == 0
 
 fn main {
 	long a = 53
@@ -32,7 +32,7 @@ fn main {
 
 fn runFast -> long {
 	long a = 53
-	long b = 16
+	powerOfTwo b = 16
 	long c
 	return (benchmark 1000000:
 		c = a & (b-1))
