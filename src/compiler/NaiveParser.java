@@ -31,7 +31,7 @@ public class NaiveParser {
 //	static File inputFile = new File("src/testbench/if-else-statement.hex");
 //	static File inputFile = new File("src/fibonacci.hex");
 //	static File inputFile = new File("src/code9.hex");
-	static File inputFile = new File("src/code12.hex");
+	static File inputFile = new File("examples/tests.hex");
 	
 	
 	

@@ -15,10 +15,11 @@ import compiler.NaiveTypechecker.Body;
 public class Lexer {
 	
 //	static File inputFile = new File("src/testbench/if-statement.hex");
-	static File inputFile = new File("src/testbench/if-else-statement.hex");
+//	static File inputFile = new File("src/testbench/if-else-statement.hex");
 //	static File inputFile = new File("src/testbench/function-definition.hex");
 //	static File inputFile = new File("src/code6.hex");
 //	static File inputFile = new File("src/snake.hex");
+	static File inputFile = new File("examples/tests.hex");
 	
 	public static void main(String[] args) throws IOException {
 		String readLines = new String(Files.readAllBytes(inputFile.toPath())) + " ";

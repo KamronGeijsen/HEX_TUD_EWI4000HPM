@@ -4,6 +4,7 @@ import java.io.File;
 import java.io.IOException;
 import java.math.BigInteger;
 import java.nio.file.Files;
+import java.sql.Array;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -34,7 +35,8 @@ public class NaiveTypechecker {
 //	static File inputFile = new File("src/primes.hex");
 //	static File inputFile = new File("src/code12.hex");
 //	static File inputFile = new File("src/factorial.hex");
-	static File inputFile = new File("examples/mod of PowerOfTwo.hex");
+//	static File inputFile = new File("examples/mod of PowerOfTwo.hex");
+	static File inputFile = new File("examples/tests.hex");
 	
 //	ArrayList<Function> allFunctionDefinitions = new ArrayList<NaivePolisher.Function>();
 	
@@ -56,7 +58,7 @@ public class NaiveTypechecker {
 		
 		
 		
-		Body moduleBody = (Body)polisher.polish(b, polisher.builtins);
+		Body moduleBody = (Body)polisher.createContexts(b, polisher.builtins);
 //		System.out.println(moduleBody.context.localValues);
 //		System.out.println();
 		polisher.resolveTypes(moduleBody, moduleBody.context);
@@ -204,8 +206,7 @@ public class NaiveTypechecker {
 //		throw new RuntimeException("Invalid function pointer");
 	}
 	
-	Block polish(Block b, Context parent) {
-//		System.out.println(b.getClass());
+	Block createContexts(Block b, Context parent) {
 		if(b instanceof CurlyBracketParse c) {
 			Body newBody = new Body(parent);
 			for(Block e : c.expressions) {
@@ -218,7 +219,7 @@ public class NaiveTypechecker {
 				}
 			}
 			for(Block e : c.expressions) {
-				newBody.expr.add(polish(e, newBody.context));
+				newBody.expr.add(createContexts(e, newBody.context));
 			}
 			for(Block e : newBody.expr) e.parent = newBody;
 //			System.out.println("Defined {} context " + newBody.context.localValues);
@@ -227,7 +228,7 @@ public class NaiveTypechecker {
 			Body argumentsBody = new Body(parent);
 			argumentsBody.context.localValues.name = fd.name;
 			FunctionIdentifier fid = new FunctionIdentifier(fd.name, getFunctionType(fd.funType, argumentsBody));
-			Body body = (Body)polish(fd.body, argumentsBody.context);
+			Body body = (Body) createContexts(fd.body, argumentsBody.context);
 			argumentsBody.expr.add(body);
 			for(Block e : argumentsBody.expr) e.parent = argumentsBody;
 			
@@ -250,30 +251,22 @@ public class NaiveTypechecker {
 //			argumentsBody.context.localValues.types = st.types;
 //			argumentsBody.context.localValues.vars = st.vars;
 			
-			Body body = (Body)polish(rd.body, argumentsBody.context);
+			Body body = (Body) createContexts(rd.body, argumentsBody.context);
 			argumentsBody.expr.add(body);
 			Type t = parent.getType(rd.name);
 			
 			rt.customMatch = body;
 			
-//			parent.addFunction(new Function(
-//					new FunctionIdentifier(rd.name, new FunctionType(
-//							argumentsBody.context.localValues, 
-//							new StructType(new ArrayList<>(List.of(parent.getType("boolean"))))
-//						)),
-//					body
-//					));
-			
-			
 			return new TypeObjectGenerator(t);
 		} else if(b instanceof CoreOp o) {
 //			System.out.println(o.s);
 			for(int i = 0; i < o.operands.size(); i++) {
-				o.operands.set(i, polish(o.operands.get(i), parent));
+				o.operands.set(i, createContexts(o.operands.get(i), parent));
 			}
 			
 			return o;
 		} else if(b instanceof CoreFunctionCall fc) {
+//			System.out.println(fc + " => " + ((CoreOp)fc.function).operands);
 			if (fc.function instanceof Symbol s && parent.isType(s.s) && fc.argument instanceof AliasParse a) {
 				parent.localValues.types.add(parent.getType(s.s));
 				parent.localValues.vars.add(a.s);
@@ -282,8 +275,22 @@ public class NaiveTypechecker {
 			} else if (fc.function instanceof Symbol s) {
 				fc.function = new FunctionObjectGenerator(new FunctionIdentifier(s.s, null));
 				return fc;
-			}
-			else {
+			} else if (fc.function instanceof CoreOp co && co.s.equals(".")
+					&& co.operands.size() == 2
+					&& co.operands.get(0) instanceof Keyword s
+					&& s.s.equals("long") && co.operands.get(1) instanceof Lexer.SquareBracketParse bp
+					&& fc.argument instanceof AliasParse a) {
+				if(bp.expressions.size() == 1 && bp.expressions.get(0) instanceof NumberParse n)
+					parent.localValues.types.add(new NaiveArrayType(Long.parseLong(n.s)));
+				else if(bp.expressions.isEmpty())
+					parent.localValues.types.add(new NaiveArrayType(-1));
+				else throw new RuntimeException("Invalid arity" + bp.expressions);
+
+				parent.localValues.vars.add(a.s);
+//				System.out.println(bp.getClass());
+//				fc.function = new FunctionObjectGenerator(new FunctionIdentifier(s.s, null));
+				return a;
+			} else {
 				System.out.println(b);
 				
 				throw new RuntimeException("Not implemented: " + b.getClass());
@@ -294,30 +301,34 @@ public class NaiveTypechecker {
 			Body typeBody = new Body(parent);
 			typeBody.context.localValues = (StructType) parent.types.get(sd.name);
 			
-			Body body = (Body)polish(sd.body, typeBody.context);
+			Body body = (Body) createContexts(sd.body, typeBody.context);
 			body.context.localValues.name = sd.name;
 			for(Block e : typeBody.expr) e.parent = typeBody;
 			
 			return new TypeObjectGenerator(parent.getType(sd.name));
 		} else if(b instanceof CoreIfStatement ifs) {
-			ifs.argument = polish(ifs.argument, parent);
-			ifs.body = polish(ifs.body, parent);
+			ifs.argument = createContexts(ifs.argument, parent);
+			ifs.body = createContexts(ifs.body, parent);
 			if(ifs.elseBody != null)
-				ifs.elseBody = polish(ifs.elseBody, parent);
+				ifs.elseBody = createContexts(ifs.elseBody, parent);
 			return b;
 		} else if(b instanceof CoreWhileStatement iws) {
-			iws.argument = polish(iws.argument, parent);
-			iws.body = polish(iws.body, parent);
+			iws.argument = createContexts(iws.argument, parent);
+			iws.body = createContexts(iws.body, parent);
 			return b;
 		} else if(b instanceof CoreBenchmarkStatement iws) {
-			iws.expr = polish(iws.expr, parent);
-			iws.body = polish(iws.body, parent);
+			iws.expr = createContexts(iws.expr, parent);
+			iws.body = createContexts(iws.body, parent);
 			return b;
 		} else if(b instanceof ParenthesisParse p) {
-			for(int i = 0; i < p.expressions.size(); i++) {
-				p.expressions.set(i, polish(p.expressions.get(i), parent));
+			for (int i = 0; i < p.expressions.size(); i++) {
+				p.expressions.set(i, createContexts(p.expressions.get(i), parent));
 			}
 			return p;
+		} else if(b instanceof Lexer.SquareBracketParse bp) {
+			;
+//			System.out.println(bp.expressions.get(0).getClass() + "aaaaaaaaa");
+			return new NaiveArrayGenerator(parseComma(bp.expressions.get(0)));
 		} else {
 			throw new RuntimeException("Not implemented: " + b.getClass());
 		}
@@ -345,6 +356,8 @@ public class NaiveTypechecker {
 			rt.size = rt.inheritType.size;
 			return true;
 		} else if(t instanceof Primitive p){
+			return true;
+		} else if(t instanceof NaiveArrayType a){
 			return true;
 		} else throw new RuntimeException("Invalid type: " + t.getClass());
 	}
@@ -435,6 +448,10 @@ public class NaiveTypechecker {
 		} else if(b instanceof CoreBenchmarkStatement iws) {
 			resolveTypes(iws.expr, context);
 			resolveTypes(iws.body, ((Body)iws.body).context);
+		} else if(b instanceof NaiveArrayGenerator ag) {
+			for(Block e : ag.blocks) {
+				resolveTypes(e, context);
+			}
 		} else {
 			throw new RuntimeException("Not implemented: " + b.getClass());
 		}
@@ -480,11 +497,16 @@ public class NaiveTypechecker {
 				}
 				return new StructType(args);
 			}
+
+			if(o.s.equals(".") && o.operands.size() == 2 && o.operands.get(1) instanceof NaiveArrayGenerator ag) {
+				return context.getType("long");
+			}
 			ArrayList<Type> args = new ArrayList<>();
 			for(int i = 0; i < o.operands.size(); i++) {
 				args.addAll(getFlattenedType(typeChecker(o.operands.get(i), context)));
 				
 			}
+//			System.out.println(args);
 			return context.overloadedFunction(o.s, args).functionIdentifier.type.rets;
 		} else if(b instanceof AliasParse a) {
 //			System.out.println("Found: " + a.s + "\t" + context.getVariableType(a.s));
@@ -506,6 +528,14 @@ public class NaiveTypechecker {
 				return fid.type.rets;
 			}
 			throw new RuntimeException("Not implemented: " + b.getClass());
+		} else if(b instanceof NaiveArrayGenerator ag) {
+			int len = 0;
+			for(Block e : ag.blocks) {
+				len ++;
+				typeChecker(e, context).staticSubtypeOf(context.getType("long"));
+			}
+			return new NaiveArrayType(len);
+
 		} else {
 			System.out.println(b);
 			throw new RuntimeException("Not implemented: " + b.getClass());
@@ -577,6 +607,8 @@ public class NaiveTypechecker {
 			ts.add(p);
 		} else if(t instanceof RefinementType rt) {
 			ts.add(rt);
+		} else if(t instanceof NaiveArrayType at) {
+			ts.add(at);
 		} else throw new RuntimeException("Not implemented: " + t.getClass());
 		return ts;
 		
@@ -777,7 +809,25 @@ public class NaiveTypechecker {
 			return getFlattenedType(this).equals(getFlattenedType(t)) || inheritType.staticSubtypeOf(t);
 		}
 	}
-	
+	class NaiveArrayType extends Type {
+		long length;
+
+		public NaiveArrayType(long length) {
+			this.length = length;
+			size = 64;
+		}
+
+		@Override
+		boolean staticSubtypeOf(Type t) {
+			return t instanceof NaiveArrayType at && (at.length == length || at.length == -1);
+		}
+
+		@Override
+		public String toString() {
+			return "long[" + (length == -1 ? "" : length+"") + "]";
+		}
+	}
+
 	
 	class FunctionOverload {
 		ArrayList<Function> functions = new ArrayList<>();
@@ -932,7 +982,25 @@ public class NaiveTypechecker {
 		}
 		
 	}
-	
+
+	class NaiveArrayGenerator extends Expression {
+		ArrayList<Block> blocks;
+
+		public NaiveArrayGenerator(ArrayList<Block> blocks) {
+			this.blocks = blocks;
+		}
+
+		@Override
+		public String toString() {
+			return blocks.toString();
+		}
+
+		@Override
+		public String toParseString() {
+			return blocks.toString();
+		}
+	}
+
 	class TypeCast extends Expression {
 		Block value;
 		Type type;

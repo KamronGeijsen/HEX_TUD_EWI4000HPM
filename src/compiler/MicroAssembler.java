@@ -138,7 +138,7 @@ public class MicroAssembler {
 		public InstructionBlock(InstructionBlock parent, String name, Instruction... instructions) {
 			this.name = name;
 			this.parent = parent;
-			this.instructions = new ArrayList<Instruction>(Arrays.asList(instructions));
+			this.instructions = new ArrayList<>(Arrays.asList(instructions));
 		}
 		
 		@Override
@@ -318,6 +318,16 @@ public class MicroAssembler {
 		void setStackVariable(int bitOffset) {
 			instructions.add(new Pop(new Address(RBP, -bitOffset/8-8, 64)));
 		}
+		void setIndexStackArray(int bitOffset) {
+			instructions.add(new Mov(RAX, new Address(RBP, -bitOffset/8-8, 64)));
+			instructions.add(new Pop(RCX));
+			instructions.add(new Pop(new Address(RAX, RCX, 8, 8, 64)));
+		}
+		void getIndexStackArray(int bitOffset) {
+			instructions.add(new Mov(RAX, new Address(RBP, -bitOffset/8-8, 64)));
+			instructions.add(new Pop(RCX));
+			instructions.add(new Push(new Address(RAX, RCX, 8, 8, 64)));
+		}
 		void segFaultOrContinue() {
 			addBlock("segFaultOrContinue",
 					new Pop(RAX),
@@ -331,6 +341,16 @@ public class MicroAssembler {
 					new Mov(RAX, new Address(RSP, 64)),
 					new Push(RAX)
 					);
+		}
+		void stackToArray(int len) {
+			InstructionBlock b = addBlock("stackToArray",
+					new Pop(RAX),
+					new Mov(new Address(RAX, 64), new Immediate(len)));
+			for(int i = 0; i < len; i++)
+				b.instructions.add(new Pop(new Address(RAX, 8*len-i*8, 64)));
+			b.instructions.add(new Push(RAX));
+
+
 		}
 		InstructionBlock setupBenchmark() {
 			return addBlock("setupBenchmark", 
@@ -360,7 +380,7 @@ public class MicroAssembler {
 					);
 		}
 	}
-	
+
 	
 	class LEA extends Instruction {
 		Arg src;
@@ -453,27 +473,53 @@ public class MicroAssembler {
 			int opSize = dst.size;
 			ByteBuffer bb = ByteBuffer.allocate(256);
 			bb.order(ByteOrder.LITTLE_ENDIAN);
-			
-			if(src instanceof Immediate i) {
-				byte rex = (byte) ((opSize==64?0x48:0) | (((Register)dst).reg>=8?0x41:0));
-				if(rex > 0) bb.put(rex);
-				bb.put((byte) 0xC7);
-				
-				mr(bb, 0, dst);
 
-				if((long)(int)i.val == i.val)
-					bb.putInt((int)i.val);
-			} else if(dst instanceof Address a) {
-				bb.put(new byte	[] {0x48, (byte)0x89});
-				if(src instanceof Register d) {
-					mr(bb, d.reg, a);
-				}
-			} else if(dst instanceof Register s) {
-				bb.put(new byte	[] {0x48, (byte)0x8B});
-				mr(bb, s.reg, src);
+			byte rex = 0;
+			if (opSize == 64) rex |= 0x48;
+
+			if (dst instanceof Register) {
+				rex |= (((Register) dst).reg >= 8) ? 0x41 : 0;
+			} else if (dst instanceof Address && ((Address) dst).base != null) {
+				rex |= (((Address) dst).base.reg >= 8) ? 0x41 : 0;
 			}
+			if (src instanceof Register) {
+				rex |= (((Register) src).reg >= 8) ? 0x41 : 0;
+			}
+
+			if (rex > 0) bb.put(rex);
+
+			if (src instanceof Immediate i) {
+				if (dst instanceof Register r) {
+					bb.put((byte) (0xB8 | (r.reg & 0x7))); // MOV reg, imm
+					if (opSize == 64) {
+						bb.putLong(i.val);
+					} else {
+						bb.putInt((int) i.val);
+					}
+				} else if (dst instanceof Address) {
+					bb.put((byte) 0xC7); // MOV [mem], imm
+					mr(bb, 0, dst);
+					bb.putInt((int) i.val);
+				}
+			} else if (src instanceof Register) {
+				if (dst instanceof Address) {
+					bb.put((byte) 0x89); // MOV [mem], reg
+					mr(bb, ((Register) src).reg, dst);
+				} else if (dst instanceof Register) {
+					bb.put((byte) 0x89); // MOV reg, reg
+					mr(bb, ((Register) src).reg, dst);
+				}
+			} else if (src instanceof Address && dst instanceof Register) {
+				bb.put((byte) 0x8B); // MOV reg, [mem]
+				mr(bb, ((Register) dst).reg, src);
+			} else {
+				throw new IllegalArgumentException("Unsupported operand combination");
+			}
+
 			bytes = Arrays.copyOf(bb.array(), bb.position());
 		}
+
+
 		@Override
 		public String toString() {
 			return "mov\t"+dst+", " + src;
@@ -789,7 +835,7 @@ public class MicroAssembler {
 				indexReg = a.index.reg&7;
 			int baseReg = a.base.reg&7;
 			if (a.index != null) {
-				int scale = new int[] {-1, 0, 1, -1, 2, -1, -1, -1, -1, 3}[a.scale];
+				int scale = new int[] {-1, 0, 1, -1, 2, -1, -1, -1, 3}[a.scale];
 				if(scale == -1) throw new RuntimeException("Invalid operand, a.scale should be 1,2,4,8, but got " + a.scale);
 				
 

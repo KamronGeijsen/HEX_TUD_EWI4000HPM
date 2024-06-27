@@ -7,13 +7,11 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Map.Entry;
 
 import compiler.Lexer.AliasParse;
 import compiler.Lexer.Block;
 import compiler.Lexer.CurlyBracketParse;
 import compiler.Lexer.NumberParse;
-import compiler.Lexer.Symbol;
 import compiler.MicroAssembler.Instruction;
 import compiler.MicroAssembler.InstructionBlock;
 import compiler.MicroAssembler.AddressLabel;
@@ -25,7 +23,6 @@ import compiler.NaiveTypechecker.Context;
 import compiler.NaiveTypechecker.Function;
 import compiler.NaiveTypechecker.FunctionIdentifier;
 import compiler.NaiveTypechecker.FunctionObjectGenerator;
-import compiler.NaiveTypechecker.LiteralGenerator;
 import compiler.NaiveTypechecker.RefinementType;
 import compiler.NaiveTypechecker.StructType;
 import compiler.NaiveTypechecker.Type;
@@ -49,7 +46,7 @@ public class NaiveAssembler {
 
 		System.out.println("Parsed:\n" + b.toParseString() + "\n===========================================\n");
 		
-		Body moduleBody = (Body)polisher.polish(b, polisher.builtins);
+		Body moduleBody = (Body)polisher.createContexts(b, polisher.builtins);
 		polisher.resolveTypes(moduleBody, moduleBody.context);
 
 		polisher.typeChecker(moduleBody, moduleBody.context);
@@ -100,7 +97,9 @@ public class NaiveAssembler {
 	void print(InstructionBlock ib) {
 		for(Instruction i : ib.instructions) {
 			if(i instanceof InstructionBlock ibb) {
+				System.out.println(ibb.name + "{");
 				print(ibb);
+				System.out.println("}");
 			} else {
 				System.out.println("%04x".formatted(i.getAddress()) + "\t" + i);
 			}
@@ -160,13 +159,24 @@ public class NaiveAssembler {
 	
 	void compileExpr(InstructionBlock ib, Block b, Context context, Map<String, Variable> variables) {
 		if(b instanceof CoreOp op && op.operands.size() == 2 && op.s.equals("=")) {
-			
-			if(op.operands.get(0) instanceof AliasParse s && !context.isType(s.s)) {
+			if (op.operands.get(0) instanceof AliasParse s && !context.isType(s.s)) {
 				compileExpr(ib, op.operands.get(1), context, variables);
-				ib.setStackVariable(((LocalVariable)variables.get(s.s)).offset);
-			}
-		}
-		else if(b instanceof CoreOp op && op.operands.size() == 2) {
+				ib.setStackVariable(((LocalVariable) variables.get(s.s)).offset);
+			} else if (op.operands.get(0) instanceof CoreOp co
+					&& co.operands.size() == 2 && co.s.equals(".")
+					&& co.operands.get(0) instanceof AliasParse s
+					&& co.operands.get(1) instanceof NaiveTypechecker.NaiveArrayGenerator ag
+					&& ag.blocks.size() == 1) {
+				compileExpr(ib, op.operands.get(1), context, variables);
+				compileExpr(ib, ag.blocks.get(0), context, variables);
+				ib.setIndexStackArray(((LocalVariable) variables.get(s.s)).offset);
+			} else throw new RuntimeException("Invalid settable: " + op);
+		} else if(b instanceof CoreOp op && op.operands.size() == 2 && op.s.equals(".")
+				&& op.operands.get(0) instanceof AliasParse s
+				&& op.operands.get(1) instanceof NaiveTypechecker.NaiveArrayGenerator ag && ag.blocks.size() == 1) {
+			compileExpr(ib, ag.blocks.get(0), context, variables);
+			ib.getIndexStackArray(((LocalVariable) variables.get(s.s)).offset);
+		} else if(b instanceof CoreOp op && op.operands.size() == 2) {
 			compileExpr(ib, op.operands.get(0), context, variables);
 			compileExpr(ib, op.operands.get(1), context, variables);
 			ib.binOpStack(op.s);
@@ -232,7 +242,19 @@ public class NaiveAssembler {
 				compileExpr(ib, cbs.body, context, variables);
 			
 			ib.measureBenchmark();
-			
+		} else if(b instanceof NaiveTypechecker.NaiveArrayGenerator ag) {
+
+//			ag.blocks.
+			for(int i = 0; i < ag.blocks.size(); i++){
+				compileExpr(ib, ag.blocks.get(i), context, variables);
+			}
+			ib.pushLiteral(ag.blocks.size() * 8 + 8);
+			ib.popArguments(1);
+			ib.callExternal(builtinFunctions.get("alloc"));
+			ib.pushRet();
+			ib.stackToArray(ag.blocks.size());
+
+
 		} else if(b instanceof Body body) {
 			addStructToVariables(variables, body.context.localValues);
 			ib.allocStack(body.context.localValues.size);
