@@ -101,7 +101,8 @@ public class NaiveAssembler {
 				print(ibb);
 				System.out.println("}");
 			} else {
-				System.out.println("%04x".formatted(i.getAddress()) + "\t" + i);
+//				System.out.println("%04x".formatted(i.getAddress()) + "\t" + i);
+				System.out.println("%04x".formatted(i.getAddress()) + "\t" + i + "\t" + Arrays.toString(i.bytes));
 			}
 		}
 	}
@@ -253,6 +254,26 @@ public class NaiveAssembler {
 			ib.callExternal(builtinFunctions.get("alloc"));
 			ib.pushRet();
 			ib.stackToArray(ag.blocks.size());
+
+		} else if(b instanceof NaiveParser.CoreWhileStatement ws) {
+
+			AddressLabel repeat = ib.label();
+			compileExpr(ib, ws.argument, context, variables);
+			ib.setupWhile(null);
+			MicroAssembler.Jcc tmpJcc = (MicroAssembler.Jcc)((InstructionBlock)ib.instructions.get(ib.instructions.size()-1)).instructions.get(2);
+
+			Body body = (Body)ws.body;
+			addStructToVariables(variables, body.context.localValues);
+			ib.allocStack(body.context.localValues.size);
+
+			for(Block block : body.expr) {
+				compileExpr(ib, block, body.context, variables);
+			}
+			removeStructFromVariables(variables, body.context.localValues);
+			ib.deallocStack(body.context.localValues.size);
+			ib.jmp(repeat);
+			AddressLabel brk = ib.label();
+			tmpJcc.label = brk;
 
 
 		} else if(b instanceof Body body) {

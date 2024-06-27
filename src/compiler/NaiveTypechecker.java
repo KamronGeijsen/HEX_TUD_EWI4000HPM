@@ -98,6 +98,11 @@ public class NaiveTypechecker {
 		builtins.addFunction(new BuiltinFunction(new FunctionIdentifier("+",new FunctionType(new StructType(new ArrayList<>(List.of(longType, longType))), new StructType(new ArrayList<>(List.of(longType)))))));
 		builtins.addFunction(new BuiltinFunction(new FunctionIdentifier("-",new FunctionType(new StructType(new ArrayList<>(List.of(longType, longType))), new StructType(new ArrayList<>(List.of(longType)))))));
 		builtins.addFunction(new BuiltinFunction(new FunctionIdentifier("==",new FunctionType(new StructType(new ArrayList<>(List.of(longType, longType))), new StructType(new ArrayList<>(List.of(boolType)))))));
+		builtins.addFunction(new BuiltinFunction(new FunctionIdentifier("!=",new FunctionType(new StructType(new ArrayList<>(List.of(longType, longType))), new StructType(new ArrayList<>(List.of(boolType)))))));
+		builtins.addFunction(new BuiltinFunction(new FunctionIdentifier("<=",new FunctionType(new StructType(new ArrayList<>(List.of(longType, longType))), new StructType(new ArrayList<>(List.of(boolType)))))));
+		builtins.addFunction(new BuiltinFunction(new FunctionIdentifier(">",new FunctionType(new StructType(new ArrayList<>(List.of(longType, longType))), new StructType(new ArrayList<>(List.of(boolType)))))));
+		builtins.addFunction(new BuiltinFunction(new FunctionIdentifier(">=",new FunctionType(new StructType(new ArrayList<>(List.of(longType, longType))), new StructType(new ArrayList<>(List.of(boolType)))))));
+		builtins.addFunction(new BuiltinFunction(new FunctionIdentifier("<",new FunctionType(new StructType(new ArrayList<>(List.of(longType, longType))), new StructType(new ArrayList<>(List.of(boolType)))))));
 		builtins.addFunction(new BuiltinFunction(new FunctionIdentifier("return",new FunctionType(new StructType(new ArrayList<>(List.of(longType))), new StructType(new ArrayList<>(List.of()))))));
 //		builtins.functions = Set.of(
 //				);
@@ -535,7 +540,10 @@ public class NaiveTypechecker {
 				typeChecker(e, context).staticSubtypeOf(context.getType("long"));
 			}
 			return new NaiveArrayType(len);
-
+		} else if(b instanceof CoreWhileStatement cs) {
+			typeChecker(cs.argument, context).staticSubtypeOf(context.getType("boolean"));
+			typeChecker(cs.body, context).staticSubtypeOf(context.getType("long"));
+			return new NaiveArrayType(-1);
 		} else {
 			System.out.println(b);
 			throw new RuntimeException("Not implemented: " + b.getClass());

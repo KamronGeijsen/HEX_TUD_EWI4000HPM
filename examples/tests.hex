@@ -1,0 +1,10 @@
+fn main {
+    long b = 5
+    long[4] a = [1,2,3,b-1]
+    long i = 0
+    while i < 4 {
+        a[i] = 25
+        i = i + 1
+    }
+    print(a[3])
+}

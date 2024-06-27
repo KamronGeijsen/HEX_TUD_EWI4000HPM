@@ -379,6 +379,18 @@ public class MicroAssembler {
 					new Jcc(Condition.NE, label)
 					);
 		}
+		InstructionBlock setupWhile(AddressLabel label) {
+			return addBlock("setupWhile",
+					new Pop(RAX),
+//					new BinOp(RAX, RAX),
+					
+					new DirectBytes(new byte[]{0x48, (byte)0x85, (byte)0xc0}, "test rax, rax"),
+					new Jcc(Condition.E, label)
+			);
+		}
+		void jmp(AddressLabel label) {
+			instructions.add(new JMP(label));
+		}
 	}
 
 	
@@ -786,6 +798,29 @@ public class MicroAssembler {
 			if(fn instanceof RIPrelAddress a)
 				return "call\t[rip+@%04x]".formatted(getAddress() + bytes.length + ByteBuffer.wrap(bytes, 2, 4).order(ByteOrder.LITTLE_ENDIAN).getInt());
 			return super.toString();
+		}
+	}
+	class JMP extends Instruction {
+		AddressLabel label;
+
+		JMP(AddressLabel label){
+			this.label = label;
+		}
+
+		@Override
+		void assemble() {
+			bytes = new byte[] {(byte) (0xeb),0};
+		}
+
+		@Override
+		void updateLabel(Map<FunctionIdentifier, AddressLabel> labelOffset) {
+			int value = (int) (label.getAddress()-getAddress()-bytes.length);
+			bytes[1] = (byte)((value>>0)&0xff);
+		}
+		@Override
+		public String toString() {
+			return "jmp\t%04x".formatted(getAddress() + bytes.length + bytes[1]);
+
 		}
 	}
 	class Ret extends Instruction {
