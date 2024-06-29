@@ -15,8 +15,6 @@ import java.util.Map;
 import java.util.Scanner;
 
 import compiler.Lexer.Block;
-import compiler.MicroAssembler.Immediate;
-import compiler.NaiveTypechecker.Function;
 import compiler.NaiveTypechecker.FunctionIdentifier;
 
 public class MicroAssembler {
@@ -171,7 +169,13 @@ public class MicroAssembler {
 			}
 			bytes = Arrays.copyOf(bb.array(), bb.position());
 		}
-	
+		AddressLabel emptyLabel() {
+			return new AddressLabel();
+		}
+		AddressLabel label(AddressLabel label) {
+			instructions.add(label);
+			return label;
+		}
 		AddressLabel label() {
 			AddressLabel label;
 			instructions.add(label=new AddressLabel());
@@ -200,11 +204,15 @@ public class MicroAssembler {
 					);
 		}
 		InstructionBlock allocStack(int bits) {
+			if(bits == 0)
+				return null;
 			return addBlock("allocStack",
 					new BinOp(BinaryOperation.SUB, RSP, new Immediate(bits/8))
 					);
 		}
 		InstructionBlock deallocStack(int bits) {
+			if(bits == 0)
+				return null;
 			return addBlock("deallocStack",
 					new BinOp(BinaryOperation.ADD, RSP, new Immediate(bits/8))
 					);
@@ -379,7 +387,7 @@ public class MicroAssembler {
 					new Jcc(Condition.NE, label)
 					);
 		}
-		InstructionBlock setupWhile(AddressLabel label) {
+		InstructionBlock condJmp(AddressLabel label) {
 			return addBlock("setupWhile",
 					new Pop(RAX),
 //					new BinOp(RAX, RAX),
@@ -809,13 +817,21 @@ public class MicroAssembler {
 
 		@Override
 		void assemble() {
-			bytes = new byte[] {(byte) (0xeb),0};
+//			bytes = new byte[] {(byte) (0xeb),0};
+			bytes = new byte[] {(byte) (0xe9),0,0,0,0};
 		}
 
 		@Override
 		void updateLabel(Map<FunctionIdentifier, AddressLabel> labelOffset) {
 			int value = (int) (label.getAddress()-getAddress()-bytes.length);
-			bytes[1] = (byte)((value>>0)&0xff);
+//			if(value == (int)(byte)value)
+//				bytes[1] = (byte)((value>>0)&0xff);
+//			else{
+				bytes[1] = (byte)((value>>0)&0xff);
+				bytes[2] = (byte)((value>>8)&0xff);
+				bytes[3] = (byte)((value>>16)&0xff);
+				bytes[4] = (byte)((value>>24)&0xff);
+//			}
 		}
 		@Override
 		public String toString() {

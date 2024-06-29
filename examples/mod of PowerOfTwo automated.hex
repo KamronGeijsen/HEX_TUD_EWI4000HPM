@@ -1,0 +1,8 @@
+refinement powerOfTwo long n: return (n & (n-1)) == 0
+
+fn main {
+	long a = 53
+    powerOfTwo b = 16
+    long c = a % b
+    return c
+}

@@ -4,6 +4,7 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Iterator;
 
 import compiler.Lexer.AliasParse;
@@ -700,11 +701,15 @@ public class NaiveParser {
 	
 	
 	static class CoreOp extends Expression{
-		final String s;
+		String s;
 		final ArrayList<Block> operands;
 		public CoreOp(String s, ArrayList<Block> operands) {
 			this.s = s;
 			this.operands = operands;
+		}
+		public CoreOp(String s, Block... operands) {
+			this.s = s;
+			this.operands = new ArrayList<>(Arrays.asList(operands));
 		}
 		
 		@Override

@@ -5,10 +5,7 @@ import java.io.IOException;
 import java.math.BigInteger;
 import java.nio.file.Files;
 import java.sql.Array;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 import compiler.Lexer.AliasParse;
 import compiler.Lexer.Block;
@@ -94,6 +91,7 @@ public class NaiveTypechecker {
 				"void", new Primitive("void", 0)
 				);
 		builtins.addFunction(new BuiltinFunction(new FunctionIdentifier("%",new FunctionType(new StructType(new ArrayList<>(List.of(longType, longType))), new StructType(new ArrayList<>(List.of(longType)))))));
+		builtins.addFunction(new BuiltinFunction(new FunctionIdentifier("/",new FunctionType(new StructType(new ArrayList<>(List.of(longType, longType))), new StructType(new ArrayList<>(List.of(longType)))))));
 		builtins.addFunction(new BuiltinFunction(new FunctionIdentifier("&",new FunctionType(new StructType(new ArrayList<>(List.of(longType, longType))), new StructType(new ArrayList<>(List.of(longType)))))));
 		builtins.addFunction(new BuiltinFunction(new FunctionIdentifier("+",new FunctionType(new StructType(new ArrayList<>(List.of(longType, longType))), new StructType(new ArrayList<>(List.of(longType)))))));
 		builtins.addFunction(new BuiltinFunction(new FunctionIdentifier("-",new FunctionType(new StructType(new ArrayList<>(List.of(longType, longType))), new StructType(new ArrayList<>(List.of(longType)))))));
@@ -175,6 +173,21 @@ public class NaiveTypechecker {
 				} else if (c.function instanceof Symbol s && args.context.isType(s.s) && c.argument instanceof Symbol ss) {
 					types.add(args.context.getType(s.s));
 					vars.add(ss.s);
+				} else if (c.function instanceof CoreOp co && co.s.equals(".")
+						&& co.operands.size() == 2
+						&& co.operands.get(0) instanceof Keyword s
+						&& s.s.equals("long") && co.operands.get(1) instanceof Lexer.SquareBracketParse bp
+						&& c.argument instanceof AliasParse a) {
+
+					Type type;
+					if (bp.expressions.size() == 1 && bp.expressions.get(0) instanceof NumberParse n)
+						type = new NaiveArrayType(Long.parseLong(n.s));
+					else if (bp.expressions.isEmpty())
+						type = new NaiveArrayType(-1);
+					else throw new RuntimeException("Invalid arity" + bp.expressions);
+
+					types.add(type);
+					vars.add(a.s);
 				}
 			} else throw new RuntimeException("Unexpected expression: " + commaSeparated.get(i));
 		}
@@ -301,6 +314,8 @@ public class NaiveTypechecker {
 				throw new RuntimeException("Not implemented: " + b.getClass());
 			}
 		} else if(b instanceof Symbol s) {
+//			if(b instanceof Keyword kw && kw.s.equals("true"))
+//				return new LiteralGenerator(0, );
 			return b;
 		} else if(b instanceof CoreStructureDefinition sd){
 			Body typeBody = new Body(parent);
@@ -475,14 +490,13 @@ public class NaiveTypechecker {
 			return ans;
 		} else if(b instanceof CoreOp o) {
 			if(o.s.equals("=")) {
-				
 				Type force = typeChecker(o.operands.get(0), context);
 				Type value = typeChecker(o.operands.get(1), context);
-				
-				
+
 				if(value.staticSubtypeOf(force))
 					return force;
-				
+
+				System.out.println("Force " + value + " into " + force + "?");
 				if(force.staticSubtypeOf(value)) {
 //					System.out.println(force + "=" + value);
 					o.operands.set(1, new TypeCast(o.operands.get(1), force));
@@ -511,7 +525,7 @@ public class NaiveTypechecker {
 				args.addAll(getFlattenedType(typeChecker(o.operands.get(i), context)));
 				
 			}
-//			System.out.println(args);
+			System.out.println(args + o.s);
 			return context.overloadedFunction(o.s, args).functionIdentifier.type.rets;
 		} else if(b instanceof AliasParse a) {
 //			System.out.println("Found: " + a.s + "\t" + context.getVariableType(a.s));
@@ -523,12 +537,14 @@ public class NaiveTypechecker {
 		} else if(b instanceof FunctionObjectGenerator fog) {
 			return fog.functionIdentifier.type;
 		} else if(b instanceof CoreBenchmarkStatement fog) {
-			return typeChecker(fog.body, context);
+			typeChecker(fog.body, context);
+			return context.getType("long");
 		} else if(b instanceof CoreFunctionCall fc) {
 			Type fun = typeChecker(fc.function, context);
 			Type args = typeChecker(fc.argument, context);
 			if(fc.function instanceof FunctionObjectGenerator fog) {
 				FunctionIdentifier fid = context.overloadedFunction(fog.functionIdentifier.name, getFlattenedType(args)).functionIdentifier;
+				System.out.println(fid.type.args + " RETURNED FID");
 				fog.functionIdentifier = fid;
 				return fid.type.rets;
 			}
@@ -544,6 +560,16 @@ public class NaiveTypechecker {
 			typeChecker(cs.argument, context).staticSubtypeOf(context.getType("boolean"));
 			typeChecker(cs.body, context).staticSubtypeOf(context.getType("long"));
 			return new NaiveArrayType(-1);
+		} else if(b instanceof CoreIfStatement cs) {
+			typeChecker(cs.argument, context).staticSubtypeOf(context.getType("boolean"));
+			Type body = typeChecker(cs.body, context);
+			Type elseBody = typeChecker(cs.elseBody, context);
+//			if(body.staticSubtypeOf(elseBody))
+//				return body;
+//			else (elseBody.staticSubtypeOf(body))
+//				return elseBody;
+//			else throw new RuntimeException("Invalid types")
+			return new TypeUnion(body, elseBody);
 		} else {
 			System.out.println(b);
 			throw new RuntimeException("Not implemented: " + b.getClass());
@@ -617,6 +643,8 @@ public class NaiveTypechecker {
 			ts.add(rt);
 		} else if(t instanceof NaiveArrayType at) {
 			ts.add(at);
+		} else if(t instanceof TypeUnion tu) {
+			ts.add(tu);
 		} else throw new RuntimeException("Not implemented: " + t.getClass());
 		return ts;
 		
@@ -662,25 +690,36 @@ public class NaiveTypechecker {
 			return parent.getFunction(fid);
 		}
 		Function overloadedFunction(String name, ArrayList<Type> args) {
+
 			FunctionOverload fo = functions.get(name);
-			if(fo != null)
+			if(fo != null){
+				Function bestFunction = null;
+				ArrayList<Type> flattenedBest = null;
 				nextFn: for(Function f : fo.functions) {
 //					if(args.equals(getFlattenedType(f.functionIdentifier.type.args)))
 //						return f;
-//					System.out.println(f.functionIdentifier.name);
+					System.out.println(f.functionIdentifier.name + f.functionIdentifier.type.args);
 					ArrayList<Type> flattened = getFlattenedType(f.functionIdentifier.type.args);
-					if(flattened.size() != args.size()) {
+
+					if (flattened.size() != args.size()) {
 //						System.out.println("Nope! " + args + " is not a subtype of " + flattened);
 						continue;
 					}
-					for(int i = 0; i < args.size(); i++) {
-						if(!args.get(i).staticSubtypeOf(flattened.get(i))) {
+					System.out.println(f + "\t" + args + "???");
+					for (int i = 0; i < args.size(); i++) {
+						if (!args.get(i).staticSubtypeOf(flattened.get(i))) {
 //							System.out.println("Nope! " + args.get(i) + " is not a subtype of " + flattened.get(i));
+							continue nextFn;
+						} else if(bestFunction != null && !flattened.get(i).staticSubtypeOf(flattenedBest.get(i))) {
 							continue nextFn;
 						}
 					}
-					return f;
-				
+					System.out.println(f + "\t" + args + "!!!");
+					bestFunction = f;
+					flattenedBest = flattened;
+				}
+				System.out.println(bestFunction + "\twas best");
+				return bestFunction;
 			}
 			if(parent == null)
 				throw new RuntimeException("Function does not exist: \"" + name + "\" " + args);
@@ -814,7 +853,16 @@ public class NaiveTypechecker {
 		
 		@Override
 		boolean staticSubtypeOf(Type t) {
-			return getFlattenedType(this).equals(getFlattenedType(t)) || inheritType.staticSubtypeOf(t);
+//			System.out.println(this + " into " +  t + "  ~ " + inheritType);
+			ArrayList<Type> t1 = getFlattenedType(this);
+			ArrayList<Type> t3 = getFlattenedType(inheritType);
+			ArrayList<Type> t2 = getFlattenedType(t);
+			for(int i = 0; i < t1.size(); i++){
+				if(!t1.get(i).equals(t2.get(i)) && !t3.get(i).staticSubtypeOf(t2.get(i)))
+
+					return false;
+			}
+			return true;
 		}
 	}
 	class NaiveArrayType extends Type {
@@ -833,6 +881,17 @@ public class NaiveTypechecker {
 		@Override
 		public String toString() {
 			return "long[" + (length == -1 ? "" : length+"") + "]";
+		}
+	}
+	class TypeUnion extends Type {
+		ArrayList<Type> ts;
+		TypeUnion(Type... ts) {
+			this.ts = new ArrayList<>(Arrays.asList(ts));
+		}
+
+		@Override
+		public String toString() {
+			return "<"+ ts + ">";
 		}
 	}
 

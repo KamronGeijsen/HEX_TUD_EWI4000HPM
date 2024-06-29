@@ -1,5 +1,15 @@
 package compiler;
 
+import compiler.Lexer.AliasParse;
+import compiler.Lexer.Block;
+import compiler.Lexer.CurlyBracketParse;
+import compiler.Lexer.NumberParse;
+import compiler.MicroAssembler.AddressLabel;
+import compiler.MicroAssembler.Instruction;
+import compiler.MicroAssembler.InstructionBlock;
+import compiler.NaiveParser.*;
+import compiler.NaiveTypechecker.*;
+
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -8,30 +18,13 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 
-import compiler.Lexer.AliasParse;
-import compiler.Lexer.Block;
-import compiler.Lexer.CurlyBracketParse;
-import compiler.Lexer.NumberParse;
-import compiler.MicroAssembler.Instruction;
-import compiler.MicroAssembler.InstructionBlock;
-import compiler.MicroAssembler.AddressLabel;
-import compiler.NaiveParser.CoreBenchmarkStatement;
-import compiler.NaiveParser.CoreFunctionCall;
-import compiler.NaiveParser.CoreOp;
-import compiler.NaiveTypechecker.Body;
-import compiler.NaiveTypechecker.Context;
-import compiler.NaiveTypechecker.Function;
-import compiler.NaiveTypechecker.FunctionIdentifier;
-import compiler.NaiveTypechecker.FunctionObjectGenerator;
-import compiler.NaiveTypechecker.RefinementType;
-import compiler.NaiveTypechecker.StructType;
-import compiler.NaiveTypechecker.Type;
-import compiler.NaiveTypechecker.TypeCast;
-
 public class NaiveAssembler {
 //	static File inputFile = new File("src/code12.hex");
 //	static File inputFile = new File("examples/mod of PowerOfTwo.hex");
-	static File inputFile = new File("examples/tests.hex");
+//	static File inputFile = new File("examples/boundschecks.hex");
+	static File inputFile = new File("examples/indexOf.hex");
+//	static File inputFile = new File("examples/mod of PowerOfTwo automated.hex");
+//	static File inputFile = new File("examples/tests.hex");
 	public static void main(String[] args) throws IOException {
 		String fileContent = new String(Files.readAllBytes(inputFile.toPath())) + " ";
 		Arrays.stream(new int[0]).allMatch(n -> true);
@@ -145,7 +138,7 @@ public class NaiveAssembler {
 	void compileBody(InstructionBlock ib, Function fn) {
 		Body fnBody = fn.body;
 		ib.prolog();
-		ib.allocStack(fnBody.context.localValues.size);
+		ib.allocStack(fnBody.context.localValues.size + fn.functionIdentifier.type.args.size);
 		ib.argumentsToVariables(fn.functionIdentifier.type.args.types.size());
 		
 		HashMap<String, Variable> variables = new HashMap<>();
@@ -161,6 +154,7 @@ public class NaiveAssembler {
 	void compileExpr(InstructionBlock ib, Block b, Context context, Map<String, Variable> variables) {
 		if(b instanceof CoreOp op && op.operands.size() == 2 && op.s.equals("=")) {
 			if (op.operands.get(0) instanceof AliasParse s && !context.isType(s.s)) {
+				System.out.println(s);
 				compileExpr(ib, op.operands.get(1), context, variables);
 				ib.setStackVariable(((LocalVariable) variables.get(s.s)).offset);
 			} else if (op.operands.get(0) instanceof CoreOp co
@@ -176,6 +170,7 @@ public class NaiveAssembler {
 				&& op.operands.get(0) instanceof AliasParse s
 				&& op.operands.get(1) instanceof NaiveTypechecker.NaiveArrayGenerator ag && ag.blocks.size() == 1) {
 			compileExpr(ib, ag.blocks.get(0), context, variables);
+			System.out.println("HUH " + s.s);
 			ib.getIndexStackArray(((LocalVariable) variables.get(s.s)).offset);
 		} else if(b instanceof CoreOp op && op.operands.size() == 2) {
 			compileExpr(ib, op.operands.get(0), context, variables);
@@ -192,6 +187,13 @@ public class NaiveAssembler {
 			ib.pushStackVariable(((LocalVariable)variables.get(s.s)).offset);
 		} else if(b instanceof NumberParse n) {
 			ib.pushLiteral(Long.parseLong(n.s));
+		} else if(b instanceof Lexer.Keyword n) {
+			switch (n.s){
+				case "true": ib.pushLiteral(1); break;
+				case "false": ib.pushLiteral(0); break;
+
+			}
+
 		} else if(b instanceof CoreFunctionCall fc) {
 			if(fc.function instanceof FunctionObjectGenerator fg) {
 				if(fc.argument instanceof CoreOp op && op.s.equals(",")) {
@@ -202,7 +204,7 @@ public class NaiveAssembler {
 					compileExpr(ib, fc.argument, context, variables);
 					ib.popArguments(1);
 				}
-				
+//				System.out.println(fg.functionIdentifier.);
 				Function fn = context.overloadedFunction(fg.functionIdentifier.name, fg.functionIdentifier.type.args.types);
 				ib.callFunction(fn.functionIdentifier);
 				
@@ -222,7 +224,8 @@ public class NaiveAssembler {
 			HashMap<String, Variable> localvariables = new HashMap<>();
 			addStructToVariables(localvariables, localVariables);
 			ib.prolog();
-			ib.allocStack(localVariables.size);
+			ib.allocStack(localVariables.size + rt.customMatch.context.localValues.size);
+			addStructToVariables(localvariables, rt.customMatch.context.localValues);
 			
 			ib.argumentsToVariables(1);
 			for(Block block : rt.customMatch.expr) {
@@ -243,7 +246,7 @@ public class NaiveAssembler {
 				compileExpr(ib, cbs.body, context, variables);
 			
 			ib.measureBenchmark();
-		} else if(b instanceof NaiveTypechecker.NaiveArrayGenerator ag) {
+		} else if(b instanceof NaiveArrayGenerator ag) {
 
 //			ag.blocks.
 			for(int i = 0; i < ag.blocks.size(); i++){
@@ -254,13 +257,42 @@ public class NaiveAssembler {
 			ib.callExternal(builtinFunctions.get("alloc"));
 			ib.pushRet();
 			ib.stackToArray(ag.blocks.size());
+		} else if(b instanceof CoreIfStatement ifs) {
+			compileExpr(ib, ifs.argument, context, variables);
+			AddressLabel ifEnd = ib.emptyLabel();
+			ib.condJmp(ifEnd);
 
-		} else if(b instanceof NaiveParser.CoreWhileStatement ws) {
+			Body body = (Body)ifs.body;
+			addStructToVariables(variables, body.context.localValues);
+			ib.allocStack(body.context.localValues.size);
+
+			for(Block block : body.expr) {
+				compileExpr(ib, block, body.context, variables);
+			}
+			removeStructFromVariables(variables, body.context.localValues);
+			ib.deallocStack(body.context.localValues.size);
+
+
+			if(ifs.elseBody instanceof Body elseBody && !elseBody.expr.isEmpty()){
+				AddressLabel elseEnd = ib.emptyLabel();
+				ib.jmp(elseEnd);
+				ib.label(ifEnd);
+
+				for(Block block : elseBody.expr) {
+					compileExpr(ib, block, body.context, variables);
+				}
+				ib.label(elseEnd);
+			} else {
+				ib.label(ifEnd);
+			}
+
+		} else if(b instanceof CoreWhileStatement ws) {
 
 			AddressLabel repeat = ib.label();
 			compileExpr(ib, ws.argument, context, variables);
-			ib.setupWhile(null);
-			MicroAssembler.Jcc tmpJcc = (MicroAssembler.Jcc)((InstructionBlock)ib.instructions.get(ib.instructions.size()-1)).instructions.get(2);
+			AddressLabel endAddr = ib.emptyLabel();
+			ib.condJmp(endAddr);
+
 
 			Body body = (Body)ws.body;
 			addStructToVariables(variables, body.context.localValues);
@@ -272,8 +304,7 @@ public class NaiveAssembler {
 			removeStructFromVariables(variables, body.context.localValues);
 			ib.deallocStack(body.context.localValues.size);
 			ib.jmp(repeat);
-			AddressLabel brk = ib.label();
-			tmpJcc.label = brk;
+			ib.label(endAddr);
 
 
 		} else if(b instanceof Body body) {

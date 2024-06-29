@@ -31,17 +31,19 @@ fn main {
 }
 
 fn runFast -> long {
-	long a = 53
-	powerOfTwo b = 16
+	long[] a = [1,2,3,4]
+	long b = 3
 	long c
 	return (benchmark 1000000:
-		c = a & (b-1))
+		c = a[b])
 }
 	
 fn runSlow -> long {
-	long a = 53
-	long b = 16
+	long[] a = [1,2,3,4]
+	long b = 3
 	long c
 	return (benchmark 1000000:
-		c = a % b)
+	    if b < 4:
+		    c = a[b])
 }
+
