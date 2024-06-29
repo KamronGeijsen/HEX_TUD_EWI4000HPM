@@ -144,8 +144,8 @@ public class NaiveParser {
 //			System.out.println(b);
 			ExpressionParse p = (ExpressionParse) b;
 			substituteColonOp(p);
-			substituteKeywordOp(p);
 			substituteAccessOP(p);
+			substituteKeywordOp(p);
 			substituteApplyOP(p);
 			for(int i = 0; i < orderOfOperation.length; i++) 
 				if(i == 0) substituteUnOP(p, orderOfOperation[i]);  //TODO magic number
@@ -520,8 +520,10 @@ public class NaiveParser {
 					}
 					break;
 				case "new":
-					if(i < len-1)
-						l.add(i, new CoreFunctionCall(l.remove(i), l.remove(i)));
+					if(i < len-1) {
+						l.remove(i);
+						l.add(i, new CoreOp("new", l.remove(i)));
+					}
 					else
 						throw new RuntimeException("Invalid keyword usage");
 					break;
@@ -957,7 +959,7 @@ public class NaiveParser {
 		Block body;
 		
 		public CoreForStatement(ParenthesisParse argument, Block each, Block body) {
-			System.out.println("Parsss: " + argument);
+//			System.out.println("Parsss: " + argument);
 			this.argument = argument;
 			this.each = each;
 			this.body = body;

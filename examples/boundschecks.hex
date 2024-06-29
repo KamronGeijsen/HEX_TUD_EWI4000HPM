@@ -1,31 +1,28 @@
-refinement powerOfTwo long n: return n & (n-1) == 0
-
 fn main {
-	long a = 53
-	
-	print(runFast())
-	print(runFast())
-	print(runFast())
-	print(runFast())
-	print(runFast())
-	print(runFast())
-	print(runFast())
-	print(runFast())
-	print(runFast())
-	print(runFast())
+
+	print(runSlow())
+	print(runSlow())
+	print(runSlow())
+	print(runSlow())
+	print(runSlow())
+	print(runSlow())
+	print(runSlow())
+	print(runSlow())
+	print(runSlow())
+	print(runSlow())
 	
 	print 0
-	
-	print(runSlow())
-	print(runSlow())
-	print(runSlow())
-	print(runSlow())
-	print(runSlow())
-	print(runSlow())
-	print(runSlow())
-	print(runSlow())
-	print(runSlow())
-	print(runSlow())
+
+	print(runFast())
+	print(runFast())
+	print(runFast())
+	print(runFast())
+	print(runFast())
+	print(runFast())
+	print(runFast())
+	print(runFast())
+	print(runFast())
+	print(runFast())
 	
 	return 0
 }
@@ -43,7 +40,7 @@ fn runSlow -> long {
 	long b = 3
 	long c
 	return (benchmark 1000000:
-	    if b < 4:
+	    if b < a.length:
 		    c = a[b])
 }
 

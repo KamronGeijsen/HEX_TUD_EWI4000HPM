@@ -8,6 +8,10 @@ void print(u64 v) {
     printf("> %llu\n", v);
 }
 
+void print2(u64 v, u64 v2) {
+    printf("> %llu\t%llu\n", v, v2);
+}
+
 u64 scan() {
     u64 v;
     scanf("%llu", &v);
@@ -22,7 +26,13 @@ void dealloc(void* ptr) {
     free(ptr);
 }
 
-void* builtInFunctions[] = { (void*)print, (void*)scan, (void*)alloc, (void*)dealloc };
+void* builtInFunctions[] = {
+    (void*)print,
+    (void*)scan,
+    (void*)alloc,
+    (void*)dealloc,
+    (void*)print2
+ };
 
 int main(int argc, char* argv[]) {
     if (argc < 2) {

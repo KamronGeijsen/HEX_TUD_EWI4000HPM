@@ -4,17 +4,11 @@ import java.io.File;
 import java.io.IOException;
 import java.math.BigInteger;
 import java.nio.file.Files;
+import java.security.Key;
 import java.sql.Array;
 import java.util.*;
 
-import compiler.Lexer.AliasParse;
-import compiler.Lexer.Block;
-import compiler.Lexer.CurlyBracketParse;
-import compiler.Lexer.Expression;
-import compiler.Lexer.Keyword;
-import compiler.Lexer.NumberParse;
-import compiler.Lexer.ParenthesisParse;
-import compiler.Lexer.Symbol;
+import compiler.Lexer.*;
 import compiler.NaiveParser.CoreBenchmarkStatement;
 import compiler.NaiveParser.CoreFunctionCall;
 import compiler.NaiveParser.CoreFunctionDefinition;
@@ -95,6 +89,8 @@ public class NaiveTypechecker {
 		builtins.addFunction(new BuiltinFunction(new FunctionIdentifier("&",new FunctionType(new StructType(new ArrayList<>(List.of(longType, longType))), new StructType(new ArrayList<>(List.of(longType)))))));
 		builtins.addFunction(new BuiltinFunction(new FunctionIdentifier("+",new FunctionType(new StructType(new ArrayList<>(List.of(longType, longType))), new StructType(new ArrayList<>(List.of(longType)))))));
 		builtins.addFunction(new BuiltinFunction(new FunctionIdentifier("-",new FunctionType(new StructType(new ArrayList<>(List.of(longType, longType))), new StructType(new ArrayList<>(List.of(longType)))))));
+		builtins.addFunction(new BuiltinFunction(new FunctionIdentifier(">>",new FunctionType(new StructType(new ArrayList<>(List.of(longType, longType))), new StructType(new ArrayList<>(List.of(longType)))))));
+		builtins.addFunction(new BuiltinFunction(new FunctionIdentifier("<<",new FunctionType(new StructType(new ArrayList<>(List.of(longType, longType))), new StructType(new ArrayList<>(List.of(longType)))))));
 		builtins.addFunction(new BuiltinFunction(new FunctionIdentifier("==",new FunctionType(new StructType(new ArrayList<>(List.of(longType, longType))), new StructType(new ArrayList<>(List.of(boolType)))))));
 		builtins.addFunction(new BuiltinFunction(new FunctionIdentifier("!=",new FunctionType(new StructType(new ArrayList<>(List.of(longType, longType))), new StructType(new ArrayList<>(List.of(boolType)))))));
 		builtins.addFunction(new BuiltinFunction(new FunctionIdentifier("<=",new FunctionType(new StructType(new ArrayList<>(List.of(longType, longType))), new StructType(new ArrayList<>(List.of(boolType)))))));
@@ -102,6 +98,9 @@ public class NaiveTypechecker {
 		builtins.addFunction(new BuiltinFunction(new FunctionIdentifier(">=",new FunctionType(new StructType(new ArrayList<>(List.of(longType, longType))), new StructType(new ArrayList<>(List.of(boolType)))))));
 		builtins.addFunction(new BuiltinFunction(new FunctionIdentifier("<",new FunctionType(new StructType(new ArrayList<>(List.of(longType, longType))), new StructType(new ArrayList<>(List.of(boolType)))))));
 		builtins.addFunction(new BuiltinFunction(new FunctionIdentifier("return",new FunctionType(new StructType(new ArrayList<>(List.of(longType))), new StructType(new ArrayList<>(List.of()))))));
+
+		builtins.addFunction(new BuiltinFunction(new FunctionIdentifier("print",new FunctionType(new StructType(new ArrayList<>(List.of(longType))), new StructType(new ArrayList<>(List.of()))))));
+		builtins.addFunction(new BuiltinFunction(new FunctionIdentifier("print",new FunctionType(new StructType(new ArrayList<>(List.of(longType, longType))), new StructType(new ArrayList<>(List.of()))))));
 //		builtins.functions = Set.of(
 //				);
 //		builtins.typeDefinitions = List.of(
@@ -276,6 +275,18 @@ public class NaiveTypechecker {
 			rt.customMatch = body;
 			
 			return new TypeObjectGenerator(t);
+		} else if(b instanceof CoreOp o && o.s.equals("new")
+			&& o.operands.size() == 1) {
+			if(o.operands.get(0) instanceof CoreOp a && a.s.equals(".")
+				&& a.operands.size() == 2 && a.operands.get(0) instanceof Keyword kw
+				&& kw.s.equals("long") && a.operands.get(1) instanceof SquareBracketParse bp){
+				long len = -1;
+				if(bp.expressions.size() == 1 && bp.expressions.get(0) instanceof NumberParse np)
+					len = Long.parseLong(np.s);
+				o.operands.set(0, new TypeObjectGenerator(new NaiveArrayType(len)));
+
+			}
+			return o;
 		} else if(b instanceof CoreOp o) {
 //			System.out.println(o.s);
 			for(int i = 0; i < o.operands.size(); i++) {
@@ -309,7 +320,7 @@ public class NaiveTypechecker {
 //				fc.function = new FunctionObjectGenerator(new FunctionIdentifier(s.s, null));
 				return a;
 			} else {
-				System.out.println(b);
+//				System.out.println(b);
 				
 				throw new RuntimeException("Not implemented: " + b.getClass());
 			}
@@ -345,7 +356,7 @@ public class NaiveTypechecker {
 				p.expressions.set(i, createContexts(p.expressions.get(i), parent));
 			}
 			return p;
-		} else if(b instanceof Lexer.SquareBracketParse bp) {
+		} else if(b instanceof SquareBracketParse bp) {
 			;
 //			System.out.println(bp.expressions.get(0).getClass() + "aaaaaaaaa");
 			return new NaiveArrayGenerator(parseComma(bp.expressions.get(0)));
@@ -424,8 +435,8 @@ public class NaiveTypechecker {
 				resolveTypes(body.expr.get(i), context);
 			}
 			
-			System.out.println("Local variables for \""+body.context.localValues.name+"\": " + body.context.localValues);
-			System.out.println(body.context.localValues.size);
+//			System.out.println("Local variables for \""+body.context.localValues.name+"\": " + body.context.localValues);
+//			System.out.println(body.context.localValues.size);
 			
 		} else if(b instanceof FunctionObjectGenerator fg) {
 //			if(fg.functionIdentifier.type == null) {
@@ -435,21 +446,22 @@ public class NaiveTypechecker {
 //			System.out.println(fg.functionIdentifier.type.getClass());
 		} else if(b instanceof CoreOp o) {
 			if(o.s.equals(",")) {
-				
+
 				List<Block> c = parseComma(b);
 				o.operands.clear();
 				o.operands.addAll(c);
-				
-				for(int i = 0; i < o.operands.size(); i++) {
+
+				for (int i = 0; i < o.operands.size(); i++) {
 					resolveTypes(o.operands.get(i), context);
 				}
+			} else if(o.s.equals("new")) {
+				resolveTypes(o.operands.get(0), context);
 			} else {
 				for(int i = 0; i < o.operands.size(); i++) {
 					resolveTypes(o.operands.get(i), context);
 				}
 			}
 //			System.out.println(o.s);
-			
 		} else if(b instanceof CoreFunctionCall fc) {
 			resolveTypes(fc.function, context);
 			resolveTypes(fc.argument, context);
@@ -503,18 +515,25 @@ public class NaiveTypechecker {
 					return force;
 				}
 				
-				throw new RuntimeException("No match");
-			}
-			if(o.s.equals("print")) {
+				throw new RuntimeException("No match " + o.s);
+			} else if(o.s.equals("print")) {
+				System.out.println(o.operands.get(0) + "FOUND TI");
 				return typeChecker(o.operands.get(0), context);
-			}
-			if(o.s.equals(",")) {
+			} else if(o.s.equals("new") && o.operands.get(0) instanceof TypeObjectGenerator og) {
+				return og.type;
+			} else if(o.s.equals(",")) {
 				ArrayList<Type> args = new ArrayList<>();
 				for(int i = 0; i < o.operands.size(); i++) {
 					args.addAll(getFlattenedType(typeChecker(o.operands.get(i), context)));
 					
 				}
 				return new StructType(args);
+			} else if(o.s.equals(".") && o.operands.size() == 2 && o.operands.get(1) instanceof Symbol s) {
+				Type t = typeChecker(o.operands.get(0), context);
+				if(t.hasField(s.s)){
+					return t.getFieldType(s.s);
+				}
+				throw new RuntimeException("Field not found: " + s.s + " for " + o.operands.get(0) + " of type " + t);
 			}
 
 			if(o.s.equals(".") && o.operands.size() == 2 && o.operands.get(1) instanceof NaiveArrayGenerator ag) {
@@ -525,7 +544,6 @@ public class NaiveTypechecker {
 				args.addAll(getFlattenedType(typeChecker(o.operands.get(i), context)));
 				
 			}
-			System.out.println(args + o.s);
 			return context.overloadedFunction(o.s, args).functionIdentifier.type.rets;
 		} else if(b instanceof AliasParse a) {
 //			System.out.println("Found: " + a.s + "\t" + context.getVariableType(a.s));
@@ -544,7 +562,6 @@ public class NaiveTypechecker {
 			Type args = typeChecker(fc.argument, context);
 			if(fc.function instanceof FunctionObjectGenerator fog) {
 				FunctionIdentifier fid = context.overloadedFunction(fog.functionIdentifier.name, getFlattenedType(args)).functionIdentifier;
-				System.out.println(fid.type.args + " RETURNED FID");
 				fog.functionIdentifier = fid;
 				return fid.type.rets;
 			}
@@ -571,7 +588,6 @@ public class NaiveTypechecker {
 //			else throw new RuntimeException("Invalid types")
 			return new TypeUnion(body, elseBody);
 		} else {
-			System.out.println(b);
 			throw new RuntimeException("Not implemented: " + b.getClass());
 		}
 	}
@@ -582,7 +598,6 @@ public class NaiveTypechecker {
 		Context context;
 		Body(Context parent) {
 			this.context = new Context(parent);
-			System.out.println("I am a created body: " + parent + " -> " + Integer.toHexString(hashCode()));
 		}
 		
 		
@@ -698,14 +713,14 @@ public class NaiveTypechecker {
 				nextFn: for(Function f : fo.functions) {
 //					if(args.equals(getFlattenedType(f.functionIdentifier.type.args)))
 //						return f;
-					System.out.println(f.functionIdentifier.name + f.functionIdentifier.type.args);
+//					System.out.println(f.functionIdentifier.name + f.functionIdentifier.type.args);
 					ArrayList<Type> flattened = getFlattenedType(f.functionIdentifier.type.args);
 
 					if (flattened.size() != args.size()) {
 //						System.out.println("Nope! " + args + " is not a subtype of " + flattened);
 						continue;
 					}
-					System.out.println(f + "\t" + args + "???");
+//					System.out.println(f + "\t" + args + "???");
 					for (int i = 0; i < args.size(); i++) {
 						if (!args.get(i).staticSubtypeOf(flattened.get(i))) {
 //							System.out.println("Nope! " + args.get(i) + " is not a subtype of " + flattened.get(i));
@@ -714,11 +729,14 @@ public class NaiveTypechecker {
 							continue nextFn;
 						}
 					}
-					System.out.println(f + "\t" + args + "!!!");
+//					System.out.println(f + "\t" + args + "!!!");
 					bestFunction = f;
 					flattenedBest = flattened;
 				}
-				System.out.println(bestFunction + "\twas best");
+//				System.out.println(bestFunction + "\twas best");
+				if(bestFunction == null) {
+					throw new RuntimeException("No function found for " + name + args);
+				}
 				return bestFunction;
 			}
 			if(parent == null)
@@ -757,7 +775,16 @@ public class NaiveTypechecker {
 			this.size = size;
 			this.name = name;
 		}
-		
+
+		boolean hasField(String name) {
+			return false;
+		}
+		Type getFieldType(String name) {
+			return null;
+		}
+		long getFieldOffset(String name) {
+			throw new RuntimeException("No such field " + name + " for this object of type " + this);
+		}
 		boolean staticSubtypeOf(Type t) {
 			return getFlattenedType(this).equals(getFlattenedType(t));
 		}
@@ -790,7 +817,6 @@ public class NaiveTypechecker {
 		@Override
 		public String toString() {
 			StringBuilder sb = new StringBuilder();
-			System.out.println("I am " + name);
 			if(vars == null) {
 				sb.append('(');
 				for(Type t : types) {
@@ -864,9 +890,31 @@ public class NaiveTypechecker {
 			}
 			return true;
 		}
+
+		@Override
+		Type getFieldType(String name) {
+			if(inheritType instanceof StructType st && st.types.size() == 1)
+				return st.types.get(0).getFieldType(name);
+			return inheritType.getFieldType(name);
+		}
+
+		@Override
+		boolean hasField(String name) {
+			if(inheritType instanceof StructType st && st.types.size() == 1)
+				return st.types.get(0).hasField(name);
+			return inheritType.hasField(name);
+		}
+
+		@Override
+		long getFieldOffset(String name) {
+			if(inheritType instanceof StructType st && st.types.size() == 1)
+				return st.types.get(0).getFieldOffset(name);
+			return inheritType.getFieldOffset(name);
+		}
 	}
 	class NaiveArrayType extends Type {
 		long length;
+		Type lenghtType;
 
 		public NaiveArrayType(long length) {
 			this.length = length;
@@ -876,6 +924,22 @@ public class NaiveTypechecker {
 		@Override
 		boolean staticSubtypeOf(Type t) {
 			return t instanceof NaiveArrayType at && (at.length == length || at.length == -1);
+		}
+		@Override
+		boolean hasField(String name) {
+			return name.equals("length");
+		}
+
+		@Override
+		Type getFieldType(String name) {
+			return builtins.getType("long");
+		}
+
+		@Override
+		long getFieldOffset(String name) {
+			if(name.equals("length"))
+				return 0;
+			return super.getFieldOffset(name);
 		}
 
 		@Override
@@ -936,14 +1000,11 @@ public class NaiveTypechecker {
 		@Override
 		public String toString() {
 			return this.getClass().getName() + "@" + Integer.toHexString(this.hashCode());
-			// TODO Auto-generated method stub
-//			return null;
 		}
 
 		@Override
 		public String toParseString() {
-			// TODO Auto-generated method stub
-			return null;
+			return "fn " + functionIdentifier;
 		}
 		
 	}

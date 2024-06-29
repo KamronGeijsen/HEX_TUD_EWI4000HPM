@@ -172,6 +172,9 @@ public class MicroAssembler {
 		AddressLabel emptyLabel() {
 			return new AddressLabel();
 		}
+		AddressLabel emptyLabel(String name) {
+			return new AddressLabel(name);
+		}
 		AddressLabel label(AddressLabel label) {
 			instructions.add(label);
 			return label;
@@ -252,6 +255,7 @@ public class MicroAssembler {
 		void pushRet() {
 			instructions.add(new Push(RAX));
 		}
+		void popRet() { instructions.add(new Pop(RAX)); }
 		void callFunction(FunctionIdentifier fid) {
 //			System.out.println("Label define:  " + function.body);
 //			System.out.println(function.body);
@@ -261,6 +265,7 @@ public class MicroAssembler {
 			InstructionBlock ib;
 			Map<String, BinaryOperation> op1 = Map.of("+", BinaryOperation.ADD, "|", BinaryOperation.OR, "&", BinaryOperation.AND, "-", BinaryOperation.SUB, "^", BinaryOperation.XOR);
 			Map<String, Integer> conds1 = Map.of("==", 4, "!=", 5, "<", 12, ">=", 13, ">", 15, "<=", 14);
+			Map<String, BinaryOperation> opsh = Map.of("<<", BinaryOperation.SHL, ">>", BinaryOperation.SHR);
 			if(op1.containsKey(op))
 				ib= addBlock("binOp."+op,
 						new Pop(RAX),
@@ -274,13 +279,10 @@ public class MicroAssembler {
 						new DirectBytes(new byte[] {0x0F, (byte)(0x90+conds1.get(op)), (byte)0xC2}, "sete\t%rdx"), // sete rdx  ([RSP] = equal_flag)
 						new Mov(new Address(RSP, null, 0, 0, 64), RDX)
 					);
-			else if(op.equals("!="))
+			else if(opsh.containsKey(op))
 				ib= addBlock("binOp."+op,
-						new Pop(RAX),
-						new BinOp(BinaryOperation.XOR, RDX, RDX),
-						new BinOp(BinaryOperation.CMP, new Address(RSP, null, 0, 0, 64), RAX),
-						new DirectBytes(new byte[] {0x0F, (byte)0x95, (byte)0xC2}, "setne\t%rdx"), // sete rdx  ([RSP] = equal_flag)
-						new Mov(new Address(RSP, null, 0, 0, 64), RDX)
+						new Pop(RCX),
+						new ShiftOp(opsh.get(op), new Address(RSP, 64), RCX)
 					);
 			else if(op.equals("%"))
 				ib= addBlock("binOp."+op,
@@ -303,16 +305,13 @@ public class MicroAssembler {
 		}
 		InstructionBlock unOpStack(String op) {
 			InstructionBlock ib;
-			if(op.equals("return"))
-				ib= addBlock("unOp."+op,
-						new Pop(RAX)
-					);
-			else throw new RuntimeException("Not implemented binop: " + op);
+			throw new RuntimeException("Not implemented binop: " + op);
 //			instructions.add(ib);
-			return ib;
+//			return ib;
 		}
-		void callExternal(AddressLabel lbl) {
-			addBlock("callstub external",
+
+		InstructionBlock callExternal(AddressLabel lbl) {
+			return addBlock("callstub external",
 					new Mov(RBX, RSP),
 					new BinOp(BinaryOperation.AND, RSP, new Immediate(-16)),
 					new Call(new RIPrelAddress(lbl, 64)),
@@ -321,7 +320,7 @@ public class MicroAssembler {
 		}
 		void ret() {
 			instructions.add(new Ret());
-			
+
 		}
 		void setStackVariable(int bitOffset) {
 			instructions.add(new Pop(new Address(RBP, -bitOffset/8-8, 64)));
@@ -338,7 +337,7 @@ public class MicroAssembler {
 		}
 		void segFaultOrContinue() {
 			addBlock("segFaultOrContinue",
-					new Pop(RAX),
+//					new Pop(RAX),
 					new DirectBytes(new byte[] {0x48, (byte)0x85, (byte)0xC0}, "test %rax,%rax"),
 					new DirectBytes(new byte[] {0x75, 0x02}, "jne noError"),
 					new DirectBytes(new byte[] {0x0f, 0x0b}, "ud2")
@@ -357,8 +356,13 @@ public class MicroAssembler {
 			for(int i = 0; i < len; i++)
 				b.instructions.add(new Pop(new Address(RAX, 8*len-i*8, 64)));
 			b.instructions.add(new Push(RAX));
+		}
+		void allocArray(int len) {
+			InstructionBlock b = addBlock("allocArray",
+					new Mov(new Address(RCX, 64), new Immediate(len)),
 
-
+					new Mov(new Address(RAX, 64), new Immediate(len))
+			);
 		}
 		InstructionBlock setupBenchmark() {
 			return addBlock("setupBenchmark", 
@@ -399,7 +403,24 @@ public class MicroAssembler {
 		void jmp(AddressLabel label) {
 			instructions.add(new JMP(label));
 		}
-	}
+
+		void getField(int bitOffset, int fieldOffset) {
+			addBlock("getField",
+					new Mov(RAX, new Address(RBP, -bitOffset/8-8, 64)),
+					new Push(new Address(RAX, fieldOffset, 64)));
+		}
+		void setField(int bitOffset, int fieldOffset) {
+			addBlock("setField",
+					new Mov(RAX, new Address(RBP, -bitOffset/8-8, 64)),
+					new Pop(new Address(RAX, fieldOffset, 64)));
+		}
+
+		void setArrayLength(long len) {
+			addBlock("setLength",
+					new Mov(RAX, new Address(RSP, 64)),
+					new Mov(new Address(RAX, 64), new Immediate(len)));
+		}
+}
 
 	
 	class LEA extends Instruction {
@@ -433,7 +454,13 @@ public class MicroAssembler {
 		}
 	}
 	class AddressLabel extends Instruction {
+
+		String name;
 		public AddressLabel() {
+			bytes = new byte[0];
+		}
+		public AddressLabel(String name) {
+			this.name = name;
 			bytes = new byte[0];
 		}
 		public AddressLabel(int size) {
@@ -446,7 +473,7 @@ public class MicroAssembler {
 
 		@Override
 		public String toString() {
-			return "lbl:";
+			return "lbl: " + name;
 		}
 	}
 	class DirectBytes extends Instruction {
@@ -704,6 +731,7 @@ public class MicroAssembler {
 			if(src instanceof Immediate i) {
 
 				ByteBuffer bb = ByteBuffer.allocate(256);
+				bb.order(ByteOrder.LITTLE_ENDIAN);
 				if(i.val == (long)(byte)i.val) {
 					bb.put((byte)0x6a);
 					bb.put((byte)i.val);

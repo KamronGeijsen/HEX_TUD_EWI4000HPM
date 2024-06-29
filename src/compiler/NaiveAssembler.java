@@ -1,9 +1,6 @@
 package compiler;
 
-import compiler.Lexer.AliasParse;
-import compiler.Lexer.Block;
-import compiler.Lexer.CurlyBracketParse;
-import compiler.Lexer.NumberParse;
+import compiler.Lexer.*;
 import compiler.MicroAssembler.AddressLabel;
 import compiler.MicroAssembler.Instruction;
 import compiler.MicroAssembler.InstructionBlock;
@@ -21,8 +18,9 @@ import java.util.Map;
 public class NaiveAssembler {
 //	static File inputFile = new File("src/code12.hex");
 //	static File inputFile = new File("examples/mod of PowerOfTwo.hex");
-//	static File inputFile = new File("examples/boundschecks.hex");
-	static File inputFile = new File("examples/indexOf.hex");
+//static File inputFile = new File("examples/debug.hex");
+	static File inputFile = new File("examples/boundschecks.hex");
+//	static File inputFile = new File("examples/indexOf.hex");
 //	static File inputFile = new File("examples/mod of PowerOfTwo automated.hex");
 //	static File inputFile = new File("examples/tests.hex");
 	public static void main(String[] args) throws IOException {
@@ -31,6 +29,7 @@ public class NaiveAssembler {
 		Lexer lexer = new Lexer();
 		NaiveParser parser = new NaiveParser();
 		NaiveTypechecker polisher = new NaiveTypechecker();
+		NaiveOptimizer optimizer = new NaiveOptimizer();
 		
 		System.out.println("Input:\n" + fileContent + "\n===========================================\n");
 		CurlyBracketParse b = lexer.parse(fileContent);
@@ -44,7 +43,10 @@ public class NaiveAssembler {
 
 		polisher.typeChecker(moduleBody, moduleBody.context);
 		System.out.println("Polished:\n" + moduleBody.toParseString() + "\n===========================================\n");
-		
+
+
+		optimizer.optimize(moduleBody, moduleBody.context);
+		System.out.println("Optimized:\n" + moduleBody.toParseString());
 //		System.out.println(moduleBody.context.functionDefinitions.get(1).body.context.localValues);
 		
 		System.out.println("Assembled:\n");
@@ -53,6 +55,42 @@ public class NaiveAssembler {
 		naiveAssembler.compile(moduleBody);
 	}
 	
+	class AsmContext {
+		Map<String, Variable> variables = new HashMap<>();
+
+		AddressLabel returnLabel;
+		AddressLabel continueLabel;
+		AddressLabel breakLabel;
+
+		LocalVariable getLocal(String s) {
+			Variable v = variables.get(s);
+			if(v instanceof LocalVariable lv) {
+				return lv;
+			}
+			throw new RuntimeException("Could not find " + s + " in local context: " + variables);
+		}
+
+		void addStructToVariables(StructType struct) {
+			int totalOffset = 0;
+			for(Variable v : variables.values())
+				totalOffset += v.type.size;
+
+			for(int i = 0; i < struct.vars.size(); i++) {
+				Variable old = variables.put(struct.vars.get(i), new LocalVariable(struct.types.get(i), totalOffset));
+				if (old != null) throw new RuntimeException("Name shadowing! " + struct.types.get(i) + " " +struct.vars.get(i) + " replaces " + old);
+				totalOffset+=struct.types.get(i).size;
+			}
+		}
+		void removeStructFromVariables(StructType struct) {
+			for(int i = 0; i < struct.vars.size(); i++) {
+				Variable old = variables.remove(struct.vars.get(i));
+				if (old == null) throw new RuntimeException("FATAL ERROR! SHOULD EXIST " + struct.types.get(i) + " " +struct.vars.get(i));
+			}
+		}
+//		AddressLabel Label;
+
+
+	}
 
 	Map<FunctionIdentifier, AddressLabel> blockToInstrBlock = new HashMap<>();
 	Map<String, AddressLabel> builtinFunctions = new HashMap<>();
@@ -65,12 +103,15 @@ public class NaiveAssembler {
 		builtinFunctions.put("scan", root.dataLabel(64));
 		builtinFunctions.put("alloc", root.dataLabel(64));
 		builtinFunctions.put("dealloc", root.dataLabel(64));
+		builtinFunctions.put("print2", root.dataLabel(64));
 		
 		for(Function fn : s.context.allDefinedFunctions) {
+			System.out.println("FN DEF" + fn.functionIdentifier);
 			InstructionBlock blk = root.addBlock(fn.functionIdentifier.name);
 			blockToInstrBlock.put(fn.functionIdentifier, blk.label());
 			compileBody(blk, fn);
 		}
+
 		
 		System.out.println();
 		root.assemble();
@@ -117,23 +158,7 @@ public class NaiveAssembler {
 		}
 	}
 	
-	void addStructToVariables(Map<String, Variable> variables, StructType struct) {
-		int totalOffset = 0;
-		for(Variable v : variables.values())
-			totalOffset += v.type.size;
-		
-		for(int i = 0; i < struct.vars.size(); i++) {
-			Variable old = variables.put(struct.vars.get(i), new LocalVariable(struct.types.get(i), totalOffset));
-			if (old != null) throw new RuntimeException("Name shadowing! " + struct.types.get(i) + " " +struct.vars.get(i) + " replaces " + old);
-			totalOffset+=struct.types.get(i).size;
-		}
-	}
-	void removeStructFromVariables(Map<String, Variable> variables, StructType struct) {
-		for(int i = 0; i < struct.vars.size(); i++) {
-			Variable old = variables.remove(struct.vars.get(i));
-			if (old == null) throw new RuntimeException("FATAL ERROR! SHOULD EXIST " + struct.types.get(i) + " " +struct.vars.get(i));
-		}
-	}
+
 	
 	void compileBody(InstructionBlock ib, Function fn) {
 		Body fnBody = fn.body;
@@ -141,50 +166,83 @@ public class NaiveAssembler {
 		ib.allocStack(fnBody.context.localValues.size + fn.functionIdentifier.type.args.size);
 		ib.argumentsToVariables(fn.functionIdentifier.type.args.types.size());
 		
-		HashMap<String, Variable> variables = new HashMap<>();
-		addStructToVariables(variables, fn.functionIdentifier.type.args);
-		addStructToVariables(variables, fnBody.context.localValues);
+		AsmContext ac = new AsmContext();
+		ac.addStructToVariables(fn.functionIdentifier.type.args);
+		ac.addStructToVariables(fnBody.context.localValues);
 		for(Block b : fnBody.expr) {
-			compileExpr(ib, b, fnBody.context, variables);
+			compileExpr(ib, b, fnBody.context, ac);
 		}
 		ib.epilog();
 		ib.ret();
 	}
 	
-	void compileExpr(InstructionBlock ib, Block b, Context context, Map<String, Variable> variables) {
+	void compileExpr(InstructionBlock ib, Block b, Context context, AsmContext ac) {
 		if(b instanceof CoreOp op && op.operands.size() == 2 && op.s.equals("=")) {
 			if (op.operands.get(0) instanceof AliasParse s && !context.isType(s.s)) {
 				System.out.println(s);
-				compileExpr(ib, op.operands.get(1), context, variables);
-				ib.setStackVariable(((LocalVariable) variables.get(s.s)).offset);
+				compileExpr(ib, op.operands.get(1), context, ac);
+				ib.setStackVariable(ac.getLocal(s.s).offset);
 			} else if (op.operands.get(0) instanceof CoreOp co
 					&& co.operands.size() == 2 && co.s.equals(".")
 					&& co.operands.get(0) instanceof AliasParse s
 					&& co.operands.get(1) instanceof NaiveTypechecker.NaiveArrayGenerator ag
 					&& ag.blocks.size() == 1) {
-				compileExpr(ib, op.operands.get(1), context, variables);
-				compileExpr(ib, ag.blocks.get(0), context, variables);
-				ib.setIndexStackArray(((LocalVariable) variables.get(s.s)).offset);
+				compileExpr(ib, op.operands.get(1), context, ac);
+				compileExpr(ib, ag.blocks.get(0), context, ac);
+				ib.setIndexStackArray(ac.getLocal(s.s).offset);
 			} else throw new RuntimeException("Invalid settable: " + op);
 		} else if(b instanceof CoreOp op && op.operands.size() == 2 && op.s.equals(".")
 				&& op.operands.get(0) instanceof AliasParse s
 				&& op.operands.get(1) instanceof NaiveTypechecker.NaiveArrayGenerator ag && ag.blocks.size() == 1) {
-			compileExpr(ib, ag.blocks.get(0), context, variables);
+			compileExpr(ib, ag.blocks.get(0), context, ac);
 			System.out.println("HUH " + s.s);
-			ib.getIndexStackArray(((LocalVariable) variables.get(s.s)).offset);
+			ib.getIndexStackArray(ac.getLocal(s.s).offset);
+		} else if(b instanceof CoreOp op && op.operands.size() == 2 && op.s.equals(".") && op.operands.size() == 2) {
+			if(op.operands.get(0) instanceof Symbol s1 && op.operands.get(1) instanceof AliasParse ap && ap.s.equals("length")) {
+				ib.getField(ac.getLocal(s1.s).offset, 0);
+			}
 		} else if(b instanceof CoreOp op && op.operands.size() == 2) {
-			compileExpr(ib, op.operands.get(0), context, variables);
-			compileExpr(ib, op.operands.get(1), context, variables);
+//			System.out.println(op);
+			compileExpr(ib, op.operands.get(0), context, ac);
+			compileExpr(ib, op.operands.get(1), context, ac);
 			ib.binOpStack(op.s);
 		} else if(b instanceof CoreOp op && op.operands.size() == 1 && op.s.equals("print")) {
-			compileExpr(ib,  op.operands.get(0), context, variables);
+			System.out.println(op.operands.get(0).getClass());
+			if(op.operands.get(0) instanceof CoreOp c && c.s.equals(",") && c.operands.size() == 2) {
+				compileExpr(ib, c.operands.get(0), context, ac);
+				compileExpr(ib, c.operands.get(1), context, ac);
+				ib.popArguments(2);
+				ib.callExternal(builtinFunctions.get("print2"));
+			} else {
+				compileExpr(ib, op.operands.get(0), context, ac);
+				ib.popArguments(1);
+				ib.callExternal(builtinFunctions.get("print"));
+			}
+		} else if(b instanceof CoreOp op && op.s.equals("return")) {
+			if(op.operands.size() == 0) {
+
+			} else if(op.operands.size() == 1) {
+				compileExpr(ib, op.operands.get(0), context, ac);
+				ib.popRet();
+			} else throw new RuntimeException("Invalid return arity " + b);
+
+			if(ac.returnLabel == null) {
+				ib.epilog();
+				ib.ret();
+			} else {
+				ib.jmp(ac.returnLabel);
+			}
+		} else if(b instanceof CoreOp op && op.operands.size() == 1 && op.s.equals("new") && op.operands.get(0) instanceof TypeObjectGenerator tog && tog.type instanceof NaiveArrayType at) {
+			ib.pushLiteral(at.length*8 + 8);
 			ib.popArguments(1);
-			ib.callExternal(builtinFunctions.get("print"));
+			ib.callExternal(builtinFunctions.get("alloc"));
+			ib.pushRet();
+			ib.setArrayLength(at.length);
 		} else if(b instanceof CoreOp op && op.operands.size() == 1) {
-			compileExpr(ib,  op.operands.get(0), context, variables);
+			compileExpr(ib,  op.operands.get(0), context, ac);
 			ib.unOpStack(op.s);
 		} else if(b instanceof AliasParse s) {
-			ib.pushStackVariable(((LocalVariable)variables.get(s.s)).offset);
+			ib.pushStackVariable(ac.getLocal(s.s).offset);
 		} else if(b instanceof NumberParse n) {
 			ib.pushLiteral(Long.parseLong(n.s));
 		} else if(b instanceof Lexer.Keyword n) {
@@ -198,10 +256,10 @@ public class NaiveAssembler {
 			if(fc.function instanceof FunctionObjectGenerator fg) {
 				if(fc.argument instanceof CoreOp op && op.s.equals(",")) {
 					for(Block o : op.operands)
-						compileExpr(ib, o, context, variables);
+						compileExpr(ib, o, context, ac);
 					ib.popArguments(op.operands.size());
 				} else {
-					compileExpr(ib, fc.argument, context, variables);
+					compileExpr(ib, fc.argument, context, ac);
 					ib.popArguments(1);
 				}
 //				System.out.println(fg.functionIdentifier.);
@@ -215,24 +273,27 @@ public class NaiveAssembler {
 		} else if(b instanceof FunctionObjectGenerator s) {
 			
 		} else if(b instanceof TypeCast tc && tc.type instanceof RefinementType rt) {
-			StructType localVariables = (StructType)rt.inheritType;
+			StructType inheritStruct = (StructType)rt.inheritType;
 
-			compileExpr(ib, tc.value, context, variables);
+			compileExpr(ib, tc.value, context, ac);
 			ib.dup();
 			ib.popArguments(1);
 			
-			HashMap<String, Variable> localvariables = new HashMap<>();
-			addStructToVariables(localvariables, localVariables);
+			AsmContext newAc = new AsmContext();
 			ib.prolog();
-			ib.allocStack(localVariables.size + rt.customMatch.context.localValues.size);
-			addStructToVariables(localvariables, rt.customMatch.context.localValues);
+			ib.allocStack(inheritStruct.size + rt.customMatch.context.localValues.size);
+			newAc.addStructToVariables(inheritStruct);
+			newAc.addStructToVariables(rt.customMatch.context.localValues);
+			newAc.returnLabel = ib.emptyLabel("retEnd");
+
 			
 			ib.argumentsToVariables(1);
 			for(Block block : rt.customMatch.expr) {
-				compileExpr(ib, block, rt.customMatch.context, localvariables);
+				compileExpr(ib, block, rt.customMatch.context, newAc);
 			}
+			ib.label(newAc.returnLabel);
 			ib.segFaultOrContinue();
-			ib.deallocStack(localVariables.size);
+//			ib.deallocStack(inheritStruct.size);
 			ib.epilog();
 		} else if(b instanceof CoreBenchmarkStatement cbs) {
 			
@@ -240,17 +301,16 @@ public class NaiveAssembler {
 			if(cbs.expr instanceof NumberParse n) {
 				ib.repeatSetupBenchmark(Long.parseLong(n.s));
 				AddressLabel label = ib.label();
-				compileExpr(ib, cbs.body, context, variables);
+				compileExpr(ib, cbs.body, context, ac);
 				ib.repeatBenchmark(label);
 			} else
-				compileExpr(ib, cbs.body, context, variables);
+				compileExpr(ib, cbs.body, context, ac);
 			
 			ib.measureBenchmark();
 		} else if(b instanceof NaiveArrayGenerator ag) {
 
-//			ag.blocks.
 			for(int i = 0; i < ag.blocks.size(); i++){
-				compileExpr(ib, ag.blocks.get(i), context, variables);
+				compileExpr(ib, ag.blocks.get(i), context, ac);
 			}
 			ib.pushLiteral(ag.blocks.size() * 8 + 8);
 			ib.popArguments(1);
@@ -258,29 +318,19 @@ public class NaiveAssembler {
 			ib.pushRet();
 			ib.stackToArray(ag.blocks.size());
 		} else if(b instanceof CoreIfStatement ifs) {
-			compileExpr(ib, ifs.argument, context, variables);
-			AddressLabel ifEnd = ib.emptyLabel();
+			compileExpr(ib, ifs.argument, context, ac);
+			AddressLabel ifEnd = ib.emptyLabel("ifEnd");
 			ib.condJmp(ifEnd);
 
-			Body body = (Body)ifs.body;
-			addStructToVariables(variables, body.context.localValues);
-			ib.allocStack(body.context.localValues.size);
-
-			for(Block block : body.expr) {
-				compileExpr(ib, block, body.context, variables);
-			}
-			removeStructFromVariables(variables, body.context.localValues);
-			ib.deallocStack(body.context.localValues.size);
-
+			compileExpr(ib, ifs.body, context, ac);
 
 			if(ifs.elseBody instanceof Body elseBody && !elseBody.expr.isEmpty()){
-				AddressLabel elseEnd = ib.emptyLabel();
+				AddressLabel elseEnd = ib.emptyLabel("elseEnd");
 				ib.jmp(elseEnd);
 				ib.label(ifEnd);
 
-				for(Block block : elseBody.expr) {
-					compileExpr(ib, block, body.context, variables);
-				}
+				compileExpr(ib, ifs.elseBody, context, ac);
+
 				ib.label(elseEnd);
 			} else {
 				ib.label(ifEnd);
@@ -289,34 +339,26 @@ public class NaiveAssembler {
 		} else if(b instanceof CoreWhileStatement ws) {
 
 			AddressLabel repeat = ib.label();
-			compileExpr(ib, ws.argument, context, variables);
-			AddressLabel endAddr = ib.emptyLabel();
+			compileExpr(ib, ws.argument, context, ac);
+			AddressLabel endAddr = ib.emptyLabel("whileEnd");
 			ib.condJmp(endAddr);
 
+			compileExpr(ib, ws.body, context, ac);
 
-			Body body = (Body)ws.body;
-			addStructToVariables(variables, body.context.localValues);
-			ib.allocStack(body.context.localValues.size);
-
-			for(Block block : body.expr) {
-				compileExpr(ib, block, body.context, variables);
-			}
-			removeStructFromVariables(variables, body.context.localValues);
-			ib.deallocStack(body.context.localValues.size);
 			ib.jmp(repeat);
 			ib.label(endAddr);
 
 
 		} else if(b instanceof Body body) {
-			addStructToVariables(variables, body.context.localValues);
+			ac.addStructToVariables(body.context.localValues);
 			ib.allocStack(body.context.localValues.size);
 			
 			for(Block block : body.expr) {
-				compileExpr(ib, block, body.context, variables);
+				compileExpr(ib, block, body.context, ac);
 			}
-			removeStructFromVariables(variables, body.context.localValues);
+			ac.removeStructFromVariables(body.context.localValues);
 			ib.deallocStack(body.context.localValues.size);
-			
+
 		} else throw new RuntimeException("Invalid operation: " + b.getClass());
 		
 	}

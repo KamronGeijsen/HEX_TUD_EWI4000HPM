@@ -1,47 +1,54 @@
-refinement powerOfTwo long n: return n & (n-1) == 0
+refinement powerOfTwo long n: return (n & (n-1)) == 0
 
 fn main {
-	long a = 53
-	
-	print(runFast())
-	print(runFast())
-	print(runFast())
-	print(runFast())
-	print(runFast())
-	print(runFast())
-	print(runFast())
-	print(runFast())
-	print(runFast())
-	print(runFast())
+
+	runSlow()
+	runSlow()
+	runSlow()
+	runSlow()
+	runSlow()
+	runSlow()
+	runSlow()
+	runSlow()
+	runSlow()
+	runSlow()
 	
 	print 0
-	
-	print(runSlow())
-	print(runSlow())
-	print(runSlow())
-	print(runSlow())
-	print(runSlow())
-	print(runSlow())
-	print(runSlow())
-	print(runSlow())
-	print(runSlow())
-	print(runSlow())
+
+	runFast()
+	runFast()
+	runFast()
+	runFast()
+	runFast()
+	runFast()
+	runFast()
+	runFast()
+	runFast()
+	runFast()
 	
 	return 0
 }
 
-fn runFast -> long {
-	long a = 53
-	powerOfTwo b = 16
-	long c
-	return (benchmark 1000000:
-		c = a & (b-1))
-}
-	
-fn runSlow -> long {
+fn runSlow {
 	long a = 53
 	long b = 16
 	long c
-	return (benchmark 1000000:
-		c = a % b)
+
+	long time = benchmark 1000000 {
+	    c = a % b
+	}
+
+	print(time, c)
+}
+	
+fn runFast {
+	long a = 53
+	powerOfTwo b = 16
+	long c
+
+	long time = benchmark 1000000 {
+        c = a % b
+    }
+
+	print(time, c)
 }

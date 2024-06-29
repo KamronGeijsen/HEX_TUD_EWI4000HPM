@@ -58,6 +58,7 @@ public class NaiveOptimizer {
             for(Block e : body.expr)
                 optimize(e, body.context);
         } else if(b instanceof CoreOp co) {
+//            System.out.println("OPTIMIZE");
             if(co.s.equals("%") && co.operands.size() == 2
                     && getType(co.operands.get(0), context).staticSubtypeOf(context.getType("long"))
 //                    && getType(co.operands.get(1)).staticSubtypeOf(context.getType("long"))
@@ -76,6 +77,7 @@ public class NaiveOptimizer {
                 co.s = subst.s;
                 co.operands.clear();
                 co.operands.addAll(subst.operands);
+//                System.out.println("OPTIMIZE");
             }
             for(Block e : co.operands)
                 optimize(e, context);
@@ -97,10 +99,10 @@ public class NaiveOptimizer {
     boolean operationEqual(Block b1, Block b2, String var) {
         if(b1 instanceof Body b && b.expr.size() == 1
                 && b.expr.get(0) instanceof CoreOp op && op.s.equals("return") && op.operands.size() == 1) {
-            System.out.println("RETURNSS");
+//            System.out.println("RETURNSS");
             return operationEqual(op.operands.get(0), b2, var);
         } else if(b1 instanceof CoreOp o1 && b2 instanceof CoreOp o2){
-            System.out.println("OPSSSS");
+//            System.out.println("OPSSSS");
             if(!o1.s.equals(o2.s) || o1.operands.size() != o2.operands.size()) return false;
             for(int i = 0; i < o1.operands.size(); i++){
                 if(!operationEqual(o1.operands.get(i), o2.operands.get(i), var))
@@ -108,7 +110,7 @@ public class NaiveOptimizer {
             }
             return true;
         } else if(b1 instanceof AliasParse a1 && b2 instanceof AliasParse a2){
-            System.out.println("AaAAAAAA");
+//            System.out.println("AaAAAAAA");
             return a1.s.equals(var);
         } else if(b1 instanceof NumberParse a1 && b2 instanceof NumberParse a2){
             return a1.s.equals(a2.s);
