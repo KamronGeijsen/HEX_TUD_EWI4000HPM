@@ -1,46 +1,55 @@
+refinement withinBounds long n: return n < 4
+
 fn main {
 
-	print(runSlow())
-	print(runSlow())
-	print(runSlow())
-	print(runSlow())
-	print(runSlow())
-	print(runSlow())
-	print(runSlow())
-	print(runSlow())
-	print(runSlow())
-	print(runSlow())
+	runSlow()
+	runSlow()
+	runSlow()
+	runSlow()
+	runSlow()
+	runSlow()
+	runSlow()
+	runSlow()
+	runSlow()
+	runSlow()
 	
 	print 0
 
-	print(runFast())
-	print(runFast())
-	print(runFast())
-	print(runFast())
-	print(runFast())
-	print(runFast())
-	print(runFast())
-	print(runFast())
-	print(runFast())
-	print(runFast())
+	runFast()
+	runFast()
+	runFast()
+	runFast()
+	runFast()
+	runFast()
+	runFast()
+	runFast()
+	runFast()
+	runFast()
 	
 	return 0
 }
 
-fn runFast -> long {
+fn runSlow {
 	long[] a = [1,2,3,4]
 	long b = 3
 	long c
-	return (benchmark 1000000:
-		c = a[b])
+
+	long time = benchmark 1000000 {
+		if b < a.length:
+			c = a[b]
+	}
+
+	print(time, c)
 }
 	
-fn runSlow -> long {
+fn runFast {
 	long[] a = [1,2,3,4]
-	long b = 3
+	withinBounds b = 3
 	long c
-	return (benchmark 1000000:
-	    if b < a.length:
-		    c = a[b])
-}
 
+	long time = benchmark 1000000 {
+        c = a[b]
+    }
+
+	print(time, c)
+}

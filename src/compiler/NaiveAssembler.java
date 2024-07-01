@@ -1,12 +1,5 @@
 package compiler;
 
-import compiler.Lexer.*;
-import compiler.MicroAssembler.AddressLabel;
-import compiler.MicroAssembler.Instruction;
-import compiler.MicroAssembler.InstructionBlock;
-import compiler.NaiveParser.*;
-import compiler.NaiveTypechecker.*;
-
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -15,14 +8,36 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 
+import compiler.Lexer.AliasParse;
+import compiler.Lexer.Block;
+import compiler.Lexer.CurlyBracketParse;
+import compiler.Lexer.NumberParse;
+import compiler.Lexer.Symbol;
+import compiler.MicroAssembler.AddressLabel;
+import compiler.MicroAssembler.Instruction;
+import compiler.MicroAssembler.InstructionBlock;
+import compiler.NaiveParser.CoreBenchmarkStatement;
+import compiler.NaiveParser.CoreFunctionCall;
+import compiler.NaiveParser.CoreIfStatement;
+import compiler.NaiveParser.CoreOp;
+import compiler.NaiveParser.CoreWhileStatement;
+import compiler.NaiveTypechecker.Body;
+import compiler.NaiveTypechecker.Context;
+import compiler.NaiveTypechecker.Function;
+import compiler.NaiveTypechecker.FunctionIdentifier;
+import compiler.NaiveTypechecker.FunctionObjectGenerator;
+import compiler.NaiveTypechecker.NaiveArrayGenerator;
+import compiler.NaiveTypechecker.NaiveArrayType;
+import compiler.NaiveTypechecker.RefinementType;
+import compiler.NaiveTypechecker.StructType;
+import compiler.NaiveTypechecker.Type;
+import compiler.NaiveTypechecker.TypeCast;
+import compiler.NaiveTypechecker.TypeObjectGenerator;
+
 public class NaiveAssembler {
-//	static File inputFile = new File("src/code12.hex");
-//	static File inputFile = new File("examples/mod of PowerOfTwo.hex");
-//static File inputFile = new File("examples/debug.hex");
-	static File inputFile = new File("examples/boundschecks.hex");
-//	static File inputFile = new File("examples/indexOf.hex");
-//	static File inputFile = new File("examples/mod of PowerOfTwo automated.hex");
-//	static File inputFile = new File("examples/tests.hex");
+	
+	static File inputFile = new File("examples/indexOf.hex");
+	
 	public static void main(String[] args) throws IOException {
 		String fileContent = new String(Files.readAllBytes(inputFile.toPath())) + " ";
 		Arrays.stream(new int[0]).allMatch(n -> true);
@@ -38,7 +53,7 @@ public class NaiveAssembler {
 
 		System.out.println("Parsed:\n" + b.toParseString() + "\n===========================================\n");
 		
-		Body moduleBody = (Body)polisher.createContexts(b, polisher.builtins);
+		Body moduleBody = (Body)polisher.semanticAnalysis(b, polisher.builtins);
 		polisher.resolveTypes(moduleBody, moduleBody.context);
 
 		polisher.typeChecker(moduleBody, moduleBody.context);
@@ -131,12 +146,12 @@ public class NaiveAssembler {
 	void print(InstructionBlock ib) {
 		for(Instruction i : ib.instructions) {
 			if(i instanceof InstructionBlock ibb) {
-				System.out.println(ibb.name + "{");
+//				System.out.println(ibb.name + "{");
 				print(ibb);
-				System.out.println("}");
+//				System.out.println("}");
 			} else {
-//				System.out.println("%04x".formatted(i.getAddress()) + "\t" + i);
-				System.out.println("%04x".formatted(i.getAddress()) + "\t" + i + "\t" + Arrays.toString(i.bytes));
+				System.out.println("%04x".formatted(i.getAddress()) + "\t" + i);
+//				System.out.println("%04x".formatted(i.getAddress()) + "\t" + i + "\t" + Arrays.toString(i.bytes));
 			}
 		}
 	}

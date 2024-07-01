@@ -9,58 +9,62 @@ refinement sortedArray long[] array {
 }
 
 fn main {
-    long[] arr = new long[1024]
-
-    print(arr.length)
+    long[] arr = new long[128]
 
     long i = 0
     while i < arr.length {
         arr[i] = i
         i = i + 1
     }
-
-	print(runSlow(arr))
-	print(runSlow(arr))
-	print(runSlow(arr))
-	print(runSlow(arr))
-	print(runSlow(arr))
-	print(runSlow(arr))
-    print(runSlow(arr))
-    print(runSlow(arr))
-    print(runSlow(arr))
-    print(runSlow(arr))
+	runSlow(arr)
+	runSlow(arr)
+	runSlow(arr)
+	runSlow(arr)
+	runSlow(arr)
+	runSlow(arr)
+	runSlow(arr)
+	runSlow(arr)
+	runSlow(arr)
+	runSlow(arr)
+	
 	print 0
-	print(runFast(arr))
-	print(runFast(arr))
-	print(runFast(arr))
-	print(runFast(arr))
-	print(runFast(arr))
-	print(runFast(arr))
-	print(runFast(arr))
-	print(runFast(arr))
-	print(runFast(arr))
-	print(runFast(arr))
 
-
+	runFast(arr)
+	runFast(arr)
+	runFast(arr)
+	runFast(arr)
+	runFast(arr)
+	runFast(arr)
+	runFast(arr)
+	runFast(arr)
+	runFast(arr)
+	runFast(arr)
+	
 	return 0
 }
 
-fn runFast long[] arr -> long {
-	sortedArray a = arr
-	long b = 1000
+fn runSlow long[] arr {
+	long[] a = arr
+	long b = 100
 	long c
-	return (benchmark 10000:
+
+	long time = benchmark 100000 {
         c = indexOf(a, b)
-    )
+    }
+
+	print(time, c)
 }
 
-fn runSlow long[] arr -> long {
-	long[] a = arr
-	long b = 1000
+fn runFast long[] arr {
+	sortedArray a = arr
+	long b = 100
 	long c
-	return (benchmark 10000:
-	        c = indexOf(a, b)
-	    )
+
+	long time = benchmark 100000 {
+        c = indexOf(a, b)
+    }
+
+	print(time, c)
 }
 
 fn indexOf (long[] arr, long value) -> long {

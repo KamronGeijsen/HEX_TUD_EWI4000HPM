@@ -1158,8 +1158,6 @@ public class NaiveParser {
 				"|>",
 			},{
 				"print", 
-				"printv",
-				"printt",
 				"return",
 	}};
 

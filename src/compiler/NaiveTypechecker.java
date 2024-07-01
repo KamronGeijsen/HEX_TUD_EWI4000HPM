@@ -49,7 +49,7 @@ public class NaiveTypechecker {
 		
 		
 		
-		Body moduleBody = (Body)polisher.createContexts(b, polisher.builtins);
+		Body moduleBody = (Body)polisher.semanticAnalysis(b, polisher.builtins);
 //		System.out.println(moduleBody.context.localValues);
 //		System.out.println();
 		polisher.resolveTypes(moduleBody, moduleBody.context);
@@ -223,7 +223,7 @@ public class NaiveTypechecker {
 //		throw new RuntimeException("Invalid function pointer");
 	}
 	
-	Block createContexts(Block b, Context parent) {
+	Block semanticAnalysis(Block b, Context parent) {
 		if(b instanceof CurlyBracketParse c) {
 			Body newBody = new Body(parent);
 			for(Block e : c.expressions) {
@@ -236,7 +236,7 @@ public class NaiveTypechecker {
 				}
 			}
 			for(Block e : c.expressions) {
-				newBody.expr.add(createContexts(e, newBody.context));
+				newBody.expr.add(semanticAnalysis(e, newBody.context));
 			}
 			for(Block e : newBody.expr) e.parent = newBody;
 //			System.out.println("Defined {} context " + newBody.context.localValues);
@@ -245,7 +245,7 @@ public class NaiveTypechecker {
 			Body argumentsBody = new Body(parent);
 			argumentsBody.context.localValues.name = fd.name;
 			FunctionIdentifier fid = new FunctionIdentifier(fd.name, getFunctionType(fd.funType, argumentsBody));
-			Body body = (Body) createContexts(fd.body, argumentsBody.context);
+			Body body = (Body) semanticAnalysis(fd.body, argumentsBody.context);
 			argumentsBody.expr.add(body);
 			for(Block e : argumentsBody.expr) e.parent = argumentsBody;
 			
@@ -268,7 +268,7 @@ public class NaiveTypechecker {
 //			argumentsBody.context.localValues.types = st.types;
 //			argumentsBody.context.localValues.vars = st.vars;
 			
-			Body body = (Body) createContexts(rd.body, argumentsBody.context);
+			Body body = (Body) semanticAnalysis(rd.body, argumentsBody.context);
 			argumentsBody.expr.add(body);
 			Type t = parent.getType(rd.name);
 			
@@ -290,7 +290,7 @@ public class NaiveTypechecker {
 		} else if(b instanceof CoreOp o) {
 //			System.out.println(o.s);
 			for(int i = 0; i < o.operands.size(); i++) {
-				o.operands.set(i, createContexts(o.operands.get(i), parent));
+				o.operands.set(i, semanticAnalysis(o.operands.get(i), parent));
 			}
 			
 			return o;
@@ -332,28 +332,28 @@ public class NaiveTypechecker {
 			Body typeBody = new Body(parent);
 			typeBody.context.localValues = (StructType) parent.types.get(sd.name);
 			
-			Body body = (Body) createContexts(sd.body, typeBody.context);
+			Body body = (Body) semanticAnalysis(sd.body, typeBody.context);
 			body.context.localValues.name = sd.name;
 			for(Block e : typeBody.expr) e.parent = typeBody;
 			
 			return new TypeObjectGenerator(parent.getType(sd.name));
 		} else if(b instanceof CoreIfStatement ifs) {
-			ifs.argument = createContexts(ifs.argument, parent);
-			ifs.body = createContexts(ifs.body, parent);
+			ifs.argument = semanticAnalysis(ifs.argument, parent);
+			ifs.body = semanticAnalysis(ifs.body, parent);
 			if(ifs.elseBody != null)
-				ifs.elseBody = createContexts(ifs.elseBody, parent);
+				ifs.elseBody = semanticAnalysis(ifs.elseBody, parent);
 			return b;
 		} else if(b instanceof CoreWhileStatement iws) {
-			iws.argument = createContexts(iws.argument, parent);
-			iws.body = createContexts(iws.body, parent);
+			iws.argument = semanticAnalysis(iws.argument, parent);
+			iws.body = semanticAnalysis(iws.body, parent);
 			return b;
 		} else if(b instanceof CoreBenchmarkStatement iws) {
-			iws.expr = createContexts(iws.expr, parent);
-			iws.body = createContexts(iws.body, parent);
+			iws.expr = semanticAnalysis(iws.expr, parent);
+			iws.body = semanticAnalysis(iws.body, parent);
 			return b;
 		} else if(b instanceof ParenthesisParse p) {
 			for (int i = 0; i < p.expressions.size(); i++) {
-				p.expressions.set(i, createContexts(p.expressions.get(i), parent));
+				p.expressions.set(i, semanticAnalysis(p.expressions.get(i), parent));
 			}
 			return p;
 		} else if(b instanceof SquareBracketParse bp) {
